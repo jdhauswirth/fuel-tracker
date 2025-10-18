@@ -1,0 +1,1057 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Fuel Tracker">
+    <meta name="mobile-web-app-capable" content="yes">
+    <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' fill='%232E7D32'/><text x='50' y='65' font-size='50' text-anchor='middle' fill='white'>⛽</text></svg>">
+    <link rel="manifest" href="data:application/json;charset=utf-8,%7B%22name%22%3A%22Fuel%20Tracker%22%2C%22short_name%22%3A%22Fuel%22%2C%22display%22%3A%22standalone%22%2C%22background_color%22%3A%22%232E7D32%22%2C%22theme_color%22%3A%22%232E7D32%22%7D">
+    <title>Fuel Tracker</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+            background: linear-gradient(135deg, #2E7D32 0%, #1B5E20 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 500px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+            overflow: hidden;
+        }
+        
+        .header {
+            padding: 20px 30px 10px;
+        }
+        
+        h1 {
+            color: #333;
+            margin-bottom: 5px;
+            font-size: 24px;
+            font-weight: bold;
+        }
+        
+        .vehicle-info {
+            color: #333;
+            margin-bottom: 5px;
+            font-size: 13px;
+            font-weight: normal;
+        }
+        
+        .subtitle {
+            color: #666;
+            margin-bottom: 15px;
+            font-size: 10pt;
+            font-weight: normal;
+            margin-top: 0;
+        }
+        
+        .tabs {
+            display: flex;
+            background: #f5f5f5;
+            border-bottom: 2px solid #e0e0e0;
+        }
+        
+        .tab {
+            flex: 1;
+            padding: 15px;
+            text-align: center;
+            background: #f5f5f5;
+            border: none;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            color: #666;
+            transition: all 0.3s;
+        }
+        
+        .tab.active {
+            background: white;
+            color: #2E7D32;
+            border-bottom: 3px solid #2E7D32;
+        }
+        
+        .tab:hover {
+            background: #e8e8e8;
+        }
+        
+        .tab.active:hover {
+            background: white;
+        }
+        
+        .tab-content {
+            display: none;
+            padding: 30px;
+        }
+        
+        .tab-content.active {
+            display: block;
+        }
+        
+        .status {
+            padding: 12px;
+            margin-bottom: 20px;
+            border-radius: 8px;
+            font-size: 14px;
+            display: none;
+        }
+        
+        .status.info {
+            background: #e3f2fd;
+            color: #1976d2;
+            display: block;
+        }
+        
+        .status.success {
+            background: #e8f5e9;
+            color: #388e3c;
+            display: block;
+        }
+        
+        .status.error {
+            background: #ffebee;
+            color: #c62828;
+            display: block;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 6px;
+            color: #333;
+            font-weight: 600;
+            font-size: 14px;
+        }
+        
+        input, select {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 16px;
+            transition: border-color 0.3s;
+        }
+        
+        input:focus, select:focus {
+            outline: none;
+            border-color: #2E7D32;
+        }
+        
+        .calculated {
+            background: #f5f5f5;
+            color: #666;
+        }
+        
+        button {
+            width: 100%;
+            padding: 14px;
+            background: linear-gradient(135deg, #2E7D32 0%, #1B5E20 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(46, 125, 50, 0.4);
+        }
+        
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .config-section {
+            background: #f9f9f9;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-size: 14px;
+        }
+        
+        .config-section h3 {
+            margin-bottom: 10px;
+            font-size: 16px;
+        }
+        
+        #loginSection {
+            text-align: center;
+        }
+        
+        #appContent {
+            display: none;
+        }
+        
+        .info-text {
+            font-size: 12px;
+            color: #999;
+            margin-top: 4px;
+        }
+        
+        .input-with-buttons {
+            display: flex;
+            gap: 5px;
+            align-items: stretch;
+        }
+        
+        .input-with-buttons input {
+            flex: 1;
+        }
+        
+        .adjust-btn {
+            width: 45px;
+            padding: 12px;
+            background: #2E7D32;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 18px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        
+        .adjust-btn:hover {
+            background: #388E3C;
+        }
+        
+        .adjust-btn:active {
+            background: #1B5E20;
+        }
+        
+        .history-list {
+            max-height: 500px;
+            overflow-y: auto;
+        }
+        
+        .history-item {
+            background: #f9f9f9;
+            padding: 15px;
+            margin-bottom: 10px;
+            border-radius: 8px;
+            border-left: 4px solid #2E7D32;
+        }
+        
+        .history-item-date {
+            font-weight: bold;
+            color: #2E7D32;
+            margin-bottom: 5px;
+        }
+        
+        .history-item-detail {
+            font-size: 13px;
+            color: #555;
+            margin: 3px 0;
+        }
+        
+        .upload-area {
+            border: 2px dashed #2E7D32;
+            border-radius: 12px;
+            padding: 40px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        .upload-area:hover {
+            background: #f0f0f0;
+            border-color: #388E3C;
+        }
+        
+        .upload-icon {
+            font-size: 48px;
+            margin-bottom: 10px;
+        }
+        
+        #fileInput {
+            display: none;
+        }
+        
+        .secondary-btn {
+            background: #666;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>⛽ Mileage & Fuel Tracker:</h1>
+            <p class="vehicle-info">Joel H. - 2018 Subaru Outback 2.5L Limited</p>
+            <p class="vehicle-info">VIN: ending -0616</p>
+            <p class="subtitle">(Logs fuel stops to Google Sheet)</p>
+        </div>
+        
+        <div id="status" class="status" style="margin: 0 30px 20px;"></div>
+        
+        <div id="loginSection" style="padding: 0 30px 30px;">
+            <div class="config-section">
+                <h3>Setup Required</h3>
+                <p>Configure your Google Cloud Project credentials.</p>
+                <br>
+                <label>Google Client ID:</label>
+                <input type="text" id="clientId" placeholder="Your Google Client ID">
+                <p class="info-text">From Google Cloud Console</p>
+                <br>
+                <label>Google API Key:</label>
+                <input type="text" id="apiKey" placeholder="Your Google API Key">
+                <p class="info-text">From Google Cloud Console</p>
+                <br>
+                <label>Spreadsheet ID:</label>
+                <input type="text" id="spreadsheetId" placeholder="From your Google Sheets URL">
+                <p class="info-text">Found in the URL of your spreadsheet</p>
+                <br>
+                <label>Sheet Name:</label>
+                <input type="text" id="sheetName" placeholder="Sheet1" value="Sheet1">
+            </div>
+            <button onclick="handleAuthClick()">Sign in with Google</button>
+        </div>
+        
+        <div id="appContent">
+            <div class="tabs">
+                <button class="tab active" onclick="showTab('log')">📝 Log Fuel</button>
+                <button class="tab" onclick="showTab('history')">📊 History</button>
+                <button class="tab" onclick="showTab('shortcuts')">⚡ Shortcuts</button>
+            </div>
+            
+            <div id="logTab" class="tab-content active">
+                <div id="lastFillInfo" style="background: #e8f5e9; padding: 12px; border-radius: 8px; margin-bottom: 20px; display: none;">
+                    <strong>Last Fill-up:</strong>
+                    <div style="margin-top: 5px; font-size: 14px;" id="lastFillDetails"></div>
+                </div>
+                
+                <form id="fuelForm">
+                    <div class="form-group">
+                        <label for="date">Date</label>
+                        <input type="date" id="date" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="odometer">Odometer (current)</label>
+                        <div class="input-with-buttons">
+                            <button type="button" class="adjust-btn" onclick="adjustOdometer(-1)">-</button>
+                            <input type="text" id="odometer" placeholder="Current mileage" required>
+                            <button type="button" class="adjust-btn" onclick="adjustOdometer(1)">+</button>
+                        </div>
+                        <input type="hidden" id="odometerValue">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="milesFill">Miles/Fill</label>
+                        <div class="input-with-buttons">
+                            <button type="button" class="adjust-btn" onclick="adjustMilesFill(-0.1)">-</button>
+                            <input type="number" id="milesFill" step="0.1" placeholder="Miles driven">
+                            <button type="button" class="adjust-btn" onclick="adjustMilesFill(0.1)">+</button>
+                        </div>
+                        <p class="info-text">Auto-calculated, but you can adjust to match your trip odometer</p>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="fuelType">Fuel Type</label>
+                        <select id="fuelType" required>
+                            <option value="">Select...</option>
+                            <option value="R87" selected>R87</option>
+                            <option value="P91">P91</option>
+                            <option value="Other">Other</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="gallons">Gallons</label>
+                        <div class="input-with-buttons">
+                            <button type="button" class="adjust-btn" onclick="adjustGallons(-0.1)">-</button>
+                            <input type="number" id="gallons" step="0.001" value="13.500" placeholder="0.000" required>
+                            <button type="button" class="adjust-btn" onclick="adjustGallons(0.1)">+</button>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="mpg">MPG (calculated)</label>
+                        <input type="number" id="mpg" step="0.01" class="calculated" readonly>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="pricePerGal">$/Gal</label>
+                        <div class="input-with-buttons">
+                            <button type="button" class="adjust-btn" onclick="adjustPrice(-0.10)">-</button>
+                            <input type="number" id="pricePerGal" step="0.001" placeholder="0.000" required>
+                            <button type="button" class="adjust-btn" onclick="adjustPrice(0.10)">+</button>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="location">Location</label>
+                        <input type="text" id="location" list="locationList" placeholder="Select or type location" value="COSTCO SOS" required>
+                        <datalist id="locationList">
+                            <option value="COSTCO SOS">
+                            <option value="COSTCO GSE">
+                        </datalist>
+                    </div>
+                    
+                    <button type="submit">Log Fuel Stop</button>
+                </form>
+                
+                <button onclick="handleSignoutClick()" class="secondary-btn">Sign Out</button>
+            </div>
+            
+            <div id="historyTab" class="tab-content">
+                <button onclick="loadHistory()" style="margin-bottom: 20px;">🔄 Refresh History</button>
+                <div id="historyList" class="history-list">
+                    <p style="text-align: center; color: #999;">Click "Refresh History" to load your fuel stops</p>
+                </div>
+            </div>
+            
+            <div id="shortcutsTab" class="tab-content">
+                <h3 style="margin-bottom: 15px;">⚡ Auto-Launch at Gas Station</h3>
+                
+                <div style="background: #e8f5e9; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+                    <p style="margin-bottom: 10px;"><strong>📱 Add to Home Screen First!</strong></p>
+                    <p style="font-size: 13px; margin: 5px 0;">For best experience:</p>
+                    <ol style="font-size: 13px; margin-left: 20px; line-height: 1.6;">
+                        <li>In Safari, tap the Share button (square with arrow)</li>
+                        <li>Tap "Add to Home Screen"</li>
+                        <li>Name it "Fuel Tracker"</li>
+                        <li>Tap Add</li>
+                    </ol>
+                    <p style="font-size: 12px; color: #666; margin-top: 8px;">Now it opens like a native app!</p>
+                </div>
+                
+                <div style="background: #e3f2fd; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+                    <p style="margin-bottom: 10px;"><strong>📍 Default Location:</strong></p>
+                    <p style="font-size: 13px; margin: 5px 0;"><strong>COSTCO MESA</strong></p>
+                    <p style="font-size: 13px; margin: 5px 0;">1444 S Sossaman Rd</p>
+                    <p style="font-size: 13px; margin: 5px 0;">Mesa, AZ 85209-3400</p>
+                    <p style="font-size: 12px; color: #666; margin-top: 8px;">Store ID: 1028</p>
+                </div>
+                
+                <div style="background: #fff3e0; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+                    <p style="font-size: 14px; margin-bottom: 10px;">
+                        <strong>🎯 Setup Auto-Launch:</strong><br>
+                        Create an Apple Shortcut that automatically opens this app when you arrive within 400 meters of your fueling location.
+                    </p>
+                </div>
+                
+                <button onclick="window.open('#', '_self')" style="background: #4CAF50; margin-bottom: 10px;">
+                    🚀 Manual Launch App
+                </button>
+                
+                <button onclick="showShortcutInstructions()" style="background: #2196F3;">
+                    📖 View Setup Instructions
+                </button>
+                
+                <div id="shortcutInstructions" style="display: none; margin-top: 20px; background: #f9f9f9; padding: 20px; border-radius: 8px; font-size: 13px; line-height: 1.6;">
+                    <h4 style="margin-bottom: 15px;">📱 Apple Shortcuts Setup Guide</h4>
+                    
+                    <p style="margin-bottom: 15px;"><strong>Step 1: Get Your App URL</strong></p>
+                    <ol style="margin-left: 20px; margin-bottom: 15px;">
+                        <li>Once deployed (GitHub Pages), copy your app URL</li>
+                        <li>Example: <code>https://yourusername.github.io/fuel-tracker</code></li>
+                    </ol>
+                    
+                    <p style="margin-bottom: 15px;"><strong>Step 2: Create the Shortcut</strong></p>
+                    <ol style="margin-left: 20px; margin-bottom: 15px;">
+                        <li>Open the <strong>Shortcuts app</strong> on your iPhone</li>
+                        <li>Tap the <strong>+</strong> button (top right)</li>
+                        <li>Search for and add: <strong>"Open URL"</strong> action</li>
+                        <li>Paste your app URL into the URL field</li>
+                        <li>Name it: <strong>"Open Fuel Tracker"</strong></li>
+                        <li>Tap <strong>Done</strong></li>
+                    </ol>
+                    
+                    <p style="margin-bottom: 15px;"><strong>Step 3: Create Location Automation</strong></p>
+                    <ol style="margin-left: 20px; margin-bottom: 15px;">
+                        <li>Go to the <strong>Automation</strong> tab (bottom of Shortcuts app)</li>
+                        <li>Tap <strong>+</strong> → <strong>Create Personal Automation</strong></li>
+                        <li>Select <strong>"Arrive"</strong></li>
+                        <li>Tap <strong>"Choose"</strong> next to Location</li>
+                        <li>Search for: <strong>1444 S Sossaman Rd, Mesa, AZ 85209</strong></li>
+                        <li>Select the location</li>
+                        <li>Adjust radius to <strong>400 meters</strong> (drag the circle)</li>
+                        <li>Tap <strong>Next</strong></li>
+                        <li>Tap <strong>Add Action</strong></li>
+                        <li>Search for your shortcut: <strong>"Open Fuel Tracker"</strong></li>
+                        <li>Select it</li>
+                        <li>Toggle OFF <strong>"Ask Before Running"</strong> (for instant launch)</li>
+                        <li>Tap <strong>Done</strong></li>
+                    </ol>
+                    
+                    <p style="margin-bottom: 15px;"><strong>Step 4: Test It!</strong></p>
+                    <ol style="margin-left: 20px; margin-bottom: 15px;">
+                        <li>Drive toward Costco Mesa</li>
+                        <li>Within 400m, your phone will automatically open the Fuel Tracker app!</li>
+                        <li>Make sure Location Services are enabled for Shortcuts app</li>
+                    </ol>
+                    
+                    <div style="background: #e8f5e9; padding: 15px; border-radius: 8px; margin-top: 15px;">
+                        <p style="margin-bottom: 8px;"><strong>✅ Pro Tips:</strong></p>
+                        <ul style="margin-left: 20px; font-size: 12px;">
+                            <li>Add to Home Screen for even faster access</li>
+                            <li>Create multiple automations for different Costco locations</li>
+                            <li>Test the automation in the Shortcuts app before driving</li>
+                            <li>Keep Bluetooth and WiFi on for better location accuracy</li>
+                        </ul>
+                    </div>
+                    
+                    <div style="background: #fff3e0; padding: 15px; border-radius: 8px; margin-top: 15px;">
+                        <p style="margin-bottom: 8px;"><strong>🔧 Adding More Locations:</strong></p>
+                        <p style="font-size: 12px;">To add automations for other Costco locations (like COSTCO GSE), repeat Step 3 with the new address. Each location gets its own automation!</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+    <script src="https://apis.google.com/js/api.js" async defer></script>
+
+    <script>
+        let tokenClient;
+        let accessToken = null;
+        let lastOdometer = null;
+        let gapiInited = false;
+        let gisInited = false;
+        
+        const DISCOVERY_DOC = 'https://sheets.googleapis.com/$discovery/rest?version=v4';
+        const SCOPES = 'https://www.googleapis.com/auth/spreadsheets';
+        
+        const isStandalone = window.navigator.standalone || window.matchMedia('(display-mode: standalone)').matches;
+        
+        function setTodayDate() {
+            const today = new Date();
+            const year = today.getFullYear();
+            const month = String(today.getMonth() + 1).padStart(2, '0');
+            const day = String(today.getDate()).padStart(2, '0');
+            document.getElementById('date').value = `${year}-${month}-${day}`;
+        }
+        
+        setTodayDate();
+        
+        function showTab(tabName) {
+            document.querySelectorAll('.tab-content').forEach(tab => tab.classList.remove('active'));
+            document.querySelectorAll('.tab').forEach(btn => btn.classList.remove('active'));
+            
+            document.getElementById(tabName + 'Tab').classList.add('active');
+            event.target.classList.add('active');
+        }
+        
+        function showStatus(message, type = 'info') {
+            const status = document.getElementById('status');
+            status.textContent = message;
+            status.className = `status ${type}`;
+            
+            if (isStandalone && type === 'success') {
+                status.textContent += ' 📱';
+            }
+        }
+        
+        function gapiLoaded() {
+            gapi.load('client', initializeGapiClient);
+        }
+        
+        async function initializeGapiClient() {
+            const apiKey = localStorage.getItem('fuelTracker_apiKey') || document.getElementById('apiKey').value;
+            if (!apiKey) return;
+            
+            await gapi.client.init({
+                apiKey: apiKey,
+                discoveryDocs: [DISCOVERY_DOC],
+            });
+            gapiInited = true;
+        }
+        
+        function gisLoaded() {
+            const clientId = localStorage.getItem('fuelTracker_clientId') || document.getElementById('clientId').value;
+            if (!clientId) return;
+            
+            tokenClient = google.accounts.oauth2.initTokenClient({
+                client_id: clientId,
+                scope: SCOPES,
+                callback: ''
+            });
+            gisInited = true;
+        }
+        
+        function handleAuthClick() {
+            const clientId = document.getElementById('clientId').value.trim();
+            const apiKey = document.getElementById('apiKey').value.trim();
+            const spreadsheetId = document.getElementById('spreadsheetId').value.trim();
+            const sheetName = document.getElementById('sheetName').value.trim();
+            
+            if (!clientId || !apiKey || !spreadsheetId) {
+                showStatus('Please fill in all configuration fields', 'error');
+                return;
+            }
+            
+            localStorage.setItem('fuelTracker_clientId', clientId);
+            localStorage.setItem('fuelTracker_apiKey', apiKey);
+            localStorage.setItem('fuelTracker_spreadsheetId', spreadsheetId);
+            localStorage.setItem('fuelTracker_sheetName', sheetName);
+            
+            if (!gapiInited || !gisInited) {
+                initializeGapiClient();
+                gisLoaded();
+            }
+            
+            tokenClient.callback = async (resp) => {
+                if (resp.error !== undefined) {
+                    showStatus('Authentication failed: ' + resp.error, 'error');
+                    return;
+                }
+                
+                accessToken = resp.access_token;
+                document.getElementById('loginSection').style.display = 'none';
+                document.getElementById('appContent').style.display = 'block';
+                showStatus('Signed in successfully!', 'success');
+                
+                await loadLastOdometer();
+            };
+            
+            if (accessToken === null) {
+                tokenClient.requestAccessToken({prompt: 'consent'});
+            } else {
+                tokenClient.requestAccessToken({prompt: ''});
+            }
+        }
+        
+        function handleSignoutClick() {
+            if (accessToken) {
+                google.accounts.oauth2.revoke(accessToken);
+                accessToken = null;
+            }
+            document.getElementById('loginSection').style.display = 'block';
+            document.getElementById('appContent').style.display = 'none';
+            location.reload();
+        }
+        
+        async function loadLastOdometer() {
+            try {
+                const spreadsheetId = localStorage.getItem('fuelTracker_spreadsheetId');
+                const sheetName = localStorage.getItem('fuelTracker_sheetName');
+                
+                const response = await gapi.client.sheets.spreadsheets.values.get({
+                    spreadsheetId: spreadsheetId,
+                    range: `${sheetName}!B:J`,
+                });
+                
+                const values = response.result.values;
+                
+                const dataRows = values ? values.filter(row => 
+                    row && 
+                    row.length >= 2 && 
+                    row[0] && String(row[0]).trim() !== '' &&
+                    row[1] && String(row[1]).trim() !== ''
+                ) : [];
+                
+                console.log('Total rows returned:', values ? values.length : 0);
+                console.log('Rows with data:', dataRows.length);
+                
+                if (dataRows && dataRows.length > 1) {
+                    const lastRow = dataRows[dataRows.length - 1];
+                    console.log('Last data row:', lastRow);
+                    
+                    const lastDate = lastRow[0];
+                    const odometerValue = lastRow[1];
+                    
+                    console.log('Raw odometer value from sheet:', odometerValue, 'Type:', typeof odometerValue);
+                    
+                    lastOdometer = parseFloat(String(odometerValue).replace(/,/g, ''));
+                    
+                    console.log('Parsed lastOdometer:', lastOdometer);
+                    
+                    let daysAgo = '';
+                    if (lastDate) {
+                        const dateParts = lastDate.split('-');
+                        const lastDateObj = new Date(dateParts[0], dateParts[1] - 1, dateParts[2]);
+                        const today = new Date();
+                        today.setHours(0, 0, 0, 0);
+                        lastDateObj.setHours(0, 0, 0, 0);
+                        const diffTime = today.getTime() - lastDateObj.getTime();
+                        const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
+                        daysAgo = ` (${diffDays} days ago)`;
+                    }
+                    
+                    if (lastDate && lastOdometer) {
+                        document.getElementById('lastFillInfo').style.display = 'block';
+                        document.getElementById('lastFillDetails').innerHTML = 
+                            `📅 Date: ${lastDate}${daysAgo}<br>🚗 Odometer (prior): ${lastOdometer.toLocaleString()} miles`;
+                        showStatus('Last fill-up loaded successfully', 'success');
+                    }
+                    
+                    const milesFillValues = [];
+                    const pricePerGalValues = [];
+                    const startIndex = Math.max(1, dataRows.length - 4);
+                    
+                    console.log('=== DEBUGGING PRICE CALCULATION ===');
+                    console.log('Reading data rows from index', startIndex, 'to', dataRows.length - 1);
+                    
+                    for (let i = startIndex; i < dataRows.length; i++) {
+                        console.log('Data row', i, ':', dataRows[i]);
+                        
+                        const milesFillValue = dataRows[i][2];
+                        if (milesFillValue && !isNaN(milesFillValue)) {
+                            milesFillValues.push(parseFloat(String(milesFillValue).replace(/,/g, '')));
+                        }
+                        
+                        let priceValue = dataRows[i][6];
+                        console.log('  Column H (index 6) raw value:', priceValue, 'Type:', typeof priceValue);
+                        
+                        if (priceValue) {
+                            const cleanedPrice = String(priceValue).replace(/[\$,\s]/g, '').trim();
+                            console.log('  Cleaned price:', cleanedPrice);
+                            
+                            if (cleanedPrice && !isNaN(cleanedPrice)) {
+                                const parsedPrice = parseFloat(cleanedPrice);
+                                console.log('  ✓ Parsed price:', parsedPrice);
+                                pricePerGalValues.push(parsedPrice);
+                            } else {
+                                console.log('  ✗ Cleaned price is not a valid number');
+                            }
+                        } else {
+                            console.log('  ✗ Price value is empty');
+                        }
+                    }
+                    
+                    console.log('Collected price values:', pricePerGalValues);
+                    
+                    if (milesFillValues.length > 0) {
+                        const averageMilesFill = milesFillValues.reduce((a, b) => a + b, 0) / milesFillValues.length;
+                        const estimatedOdometer = lastOdometer + Math.round(averageMilesFill);
+                        document.getElementById('odometer').value = estimatedOdometer.toLocaleString('en-US');
+                        document.getElementById('odometerValue').value = estimatedOdometer;
+                        calculateValues();
+                    }
+                    
+                    if (pricePerGalValues.length > 0) {
+                        const averagePrice = pricePerGalValues.reduce((a, b) => a + b, 0) / pricePerGalValues.length;
+                        document.getElementById('pricePerGal').value = averagePrice.toFixed(3);
+                        console.log('✓ Average price calculated:', averagePrice.toFixed(3));
+                        console.log('✓ Set $/Gal field to:', document.getElementById('pricePerGal').value);
+                    } else {
+                        console.log('✗ No valid price data found in Column H (index 6)');
+                        console.log('  Make sure your prices are in Column H of your sheet');
+                    }
+                    console.log('=== END DEBUGGING ===');
+                    
+                    const uniqueLocations = new Set();
+                    for (let i = 2; i < dataRows.length; i++) {
+                        const location = dataRows[i][7];
+                        if (location && location.trim()) {
+                            uniqueLocations.add(location.trim());
+                        }
+                    }
+                    
+                    const datalist = document.getElementById('locationList');
+                    datalist.innerHTML = `
+                        <option value="COSTCO SOS">
+                        <option value="COSTCO GSE">
+                    `;
+                    uniqueLocations.forEach(location => {
+                        if (location !== "COSTCO SOS" && location !== "COSTCO GSE") {
+                            const option = document.createElement('option');
+                            option.value = location;
+                            datalist.appendChild(option);
+                        }
+                    });
+                    
+                } else {
+                    showStatus('No previous fill-ups found. This will be your first entry!', 'info');
+                }
+            } catch (err) {
+                console.log('Could not load last odometer:', err);
+                showStatus('Could not load previous data.', 'info');
+            }
+        }
+        
+        async function loadHistory() {
+            showStatus('Loading history...', 'info');
+            try {
+                const spreadsheetId = localStorage.getItem('fuelTracker_spreadsheetId');
+                const sheetName = localStorage.getItem('fuelTracker_sheetName');
+                
+                const response = await gapi.client.sheets.spreadsheets.values.get({
+                    spreadsheetId: spreadsheetId,
+                    range: `${sheetName}!B:J`,
+                });
+                
+                const values = response.result.values;
+                
+                const dataRows = values ? values.filter(row => 
+                    row && 
+                    row.length >= 2 && 
+                    row[0] && String(row[0]).trim() !== '' &&
+                    row[1] && String(row[1]).trim() !== ''
+                ) : [];
+                
+                const historyList = document.getElementById('historyList');
+                historyList.innerHTML = '';
+                
+                if (dataRows && dataRows.length > 1) {
+                    for (let i = dataRows.length - 1; i >= 1; i--) {
+                        const row = dataRows[i];
+                        const gallons = parseFloat(row[4]) || 0;
+                        const pricePerGal = parseFloat(String(row[6]).replace(/[\$,\s]/g, '')) || 0;
+                        const totalCost = (gallons * pricePerGal).toFixed(2);
+                        
+                        const item = document.createElement('div');
+                        item.className = 'history-item';
+                        const costLine = row[4] + ' gallons @ ' + row[6] + '/gal = $' + totalCost;
+                        
+                        item.innerHTML = `
+                            <div class="history-item-date">${row[0]}</div>
+                            <div class="history-item-detail">🚗 Odometer: ${row[1]} miles</div>
+                            <div class="history-item-detail">📏 Miles/Fill: ${row[2]} miles</div>
+                            <div class="history-item-detail">⛽ ${costLine}</div>
+                            <div class="history-item-detail">📊 MPG: ${row[5]}</div>
+                            <div class="history-item-detail">📍 ${row[7]}</div>
+                            ${row[8] ? '<div class="history-item-detail" style="font-size: 11px; color: #999;">🕐 Recorded: ' + row[8] + '</div>' : ''}
+                        `;
+                        historyList.appendChild(item);
+                    }
+                    showStatus('History loaded!', 'success');
+                } else {
+                    historyList.innerHTML = '<p style="text-align: center; color: #999;">No fuel stops found</p>';
+                }
+            } catch (err) {
+                console.error('Error loading history:', err);
+                showStatus('Error loading history', 'error');
+            }
+        }
+        
+        function showShortcutInstructions() {
+            const instructions = document.getElementById('shortcutInstructions');
+            if (instructions.style.display === 'none') {
+                instructions.style.display = 'block';
+            } else {
+                instructions.style.display = 'none';
+            }
+        }
+        
+        function adjustOdometer(amount) {
+            const currentValue = parseFloat(document.getElementById('odometerValue').value) || 0;
+            const newValue = currentValue + amount;
+            if (newValue >= 0) {
+                document.getElementById('odometer').value = newValue.toLocaleString('en-US');
+                document.getElementById('odometerValue').value = newValue;
+                calculateValues();
+            }
+        }
+        
+        function adjustPrice(amount) {
+            const currentValue = parseFloat(document.getElementById('pricePerGal').value) || 0;
+            const newValue = currentValue + amount;
+            if (newValue >= 0) {
+                document.getElementById('pricePerGal').value = newValue.toFixed(3);
+            }
+        }
+        
+        function adjustGallons(amount) {
+            const currentValue = parseFloat(document.getElementById('gallons').value) || 0;
+            const newValue = currentValue + amount;
+            if (newValue >= 0) {
+                document.getElementById('gallons').value = newValue.toFixed(3);
+                calculateMPG();
+            }
+        }
+        
+        function adjustMilesFill(amount) {
+            const currentValue = parseFloat(document.getElementById('milesFill').value) || 0;
+            const newValue = currentValue + amount;
+            if (newValue >= 0) {
+                document.getElementById('milesFill').value = newValue.toFixed(1);
+                const milesFill = newValue;
+                const expectedGallons = milesFill / 26.1;
+                document.getElementById('gallons').value = expectedGallons.toFixed(3);
+                calculateMPG();
+            }
+        }
+        
+        document.getElementById('odometer').addEventListener('input', function(e) {
+            let value = e.target.value.replace(/,/g, '');
+            if (value && !isNaN(value)) {
+                const numValue = parseFloat(value);
+                document.getElementById('odometerValue').value = numValue;
+                e.target.value = numValue.toLocaleString('en-US');
+            } else {
+                document.getElementById('odometerValue').value = '';
+            }
+            calculateValues();
+        });
+        
+        document.getElementById('location').addEventListener('input', function(e) {
+            e.target.value = e.target.value.toUpperCase();
+        });
+        
+        document.getElementById('milesFill').addEventListener('input', function(e) {
+            const milesFill = parseFloat(e.target.value);
+            if (milesFill > 0) {
+                const expectedGallons = milesFill / 26.1;
+                document.getElementById('gallons').value = expectedGallons.toFixed(3);
+                calculateMPG();
+            }
+        });
+        
+        document.getElementById('gallons').addEventListener('input', calculateMPG);
+        
+        function calculateValues() {
+            const odometerStr = document.getElementById('odometerValue').value;
+            const odometer = parseFloat(odometerStr);
+            
+            if (lastOdometer && odometer && odometer <= lastOdometer) {
+                showStatus('Error: Current odometer must be greater than prior odometer (' + lastOdometer.toLocaleString() + ')', 'error');
+                document.getElementById('milesFill').value = '';
+                document.getElementById('gallons').value = '13.500';
+                document.getElementById('mpg').value = '';
+                return;
+            }
+            
+            if (lastOdometer && odometer && odometer > lastOdometer) {
+                const milesFill = odometer - lastOdometer;
+                document.getElementById('milesFill').value = milesFill.toFixed(1);
+                
+                const expectedGallons = milesFill / 26.1;
+                document.getElementById('gallons').value = expectedGallons.toFixed(3);
+                
+                const mpg = milesFill / expectedGallons;
+                document.getElementById('mpg').value = mpg.toFixed(2);
+                
+                showStatus('Ready for next entry', 'info');
+            }
+        }
+        
+        function calculateMPG() {
+            const milesFill = parseFloat(document.getElementById('milesFill').value);
+            const gallons = parseFloat(document.getElementById('gallons').value);
+            
+            if (milesFill > 0 && gallons > 0) {
+                const mpg = milesFill / gallons;
+                document.getElementById('mpg').value = mpg.toFixed(2);
+            }
+        }
+        
+        document.getElementById('fuelForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const currentOdometer = parseFloat(document.getElementById('odometerValue').value);
+            
+            if (lastOdometer && currentOdometer <= lastOdometer) {
+                showStatus('Cannot submit: Current odometer must be greater than prior odometer', 'error');
+                return;
+            }
+            
+            const formData = {
+                date: document.getElementById('date').value,
+                odometer: currentOdometer,
+                milesFill: parseFloat(document.getElementById('milesFill').value) || '',
+                fuelType: document.getElementById('fuelType').value,
+                gallons: parseFloat(document.getElementById('gallons').value),
+                mpg: parseFloat(document.getElementById('mpg').value) || '',
+                pricePerGal: parseFloat(document.getElementById('pricePerGal').value),
+                location: document.getElementById('location').value
+            };
+            
+            showStatus('Saving to Google Sheets...', 'info');
+            
+            try {
+                await writeToSheet(formData);
+                showStatus('Fuel stop logged successfully!', 'success');
+                
+                lastOdometer = formData.odometer;
+                
+                document.getElementById('fuelForm').reset();
+                setTodayDate();
+                document.getElementById('fuelType').value = 'R87';
+                document.getElementById('gallons').value = '13.500';
+                document.getElementById('location').value = 'COSTCO SOS';
+                document.getElementById('odometer').value = '';
+                document.getElementById('odometerValue').value = '';
+                
+                setTimeout(() => {
+                    showStatus('Ready for next entry', 'info');
+                }, 2000);
+                
+            } catch (error) {
+                showStatus('Error saving: ' + error.message, 'error');
+                console.error('Save error:', error);
+            }
+        });
+        
+        async function writeToSheet(data) {
+            const spreadsheetId = localStorage.getItem('fuelTracker_spreadsheetId');
+            const sheetName = localStorage.getItem('fuelTracker_sheetName');
+            
+            const now = new Date();
+            const timestamp = now.getFullYear() + '-' + 
+                            String(now.getMonth() + 1).padStart(2, '0') + '-' + 
+                            String(now.getDate()).padStart(2, '0') + ' ' + 
+                            String(now.getHours()).padStart(2, '0') + ':' + 
+                            String(now.getMinutes()).padStart(2, '0') + ':' + 
+                            String(now.getSeconds()).padStart(2, '0');
+            
+            const row = [
+                data.date,
+                data.odometer,
+                data.milesFill,
+                data.fuelType,
+                data.gallons,
+                data.mpg,
+                data.pricePerGal,
+                data.location,
+                timestamp
+            ];
+            
+            const response = await gapi.client.sheets.spreadsheets.values.append({
+                spreadsheetId: spreadsheetId,
+                range: `${sheetName}!B:J`,
+                valueInputOption: 'USER_ENTERED',
+                resource: {
+                    values: [row]
+                }
+            });
+            
+            return response;
+        }
+        
+        window.addEventListener('load', () => {
+            const savedClientId = localStorage.getItem('fuelTracker_clientId');
+            const savedApiKey = localStorage.getItem('fuelTracker_apiKey');
+            const savedSpreadsheetId = localStorage.getItem('fuelTracker_spreadsheetId');
+            const savedSheetName = localStorage.getItem('fuelTracker_sheetName');
+            
+            if (savedClientId) document.getElementById('clientId').value = savedClientId;
+            if (savedApiKey) document.getElementById('apiKey').value = savedApiKey;
+            if (savedSpreadsheetId) document.getElementById('spreadsheetId').value = savedSpreadsheetId;
+            if (savedSheetName) document.getElementById('sheetName').value = savedSheetName;
+        });
+        
+        window.addEventListener('load', () => {
+            if (typeof gapi !== 'undefined') {
+                gapiLoaded();
+            }
+            if (typeof google !== 'undefined') {
+                gisLoaded();
+            }
+        });
+    </script>
+</body>
+</html>
