@@ -323,7 +323,7 @@
                 <p class="info-text">Found in the URL of your spreadsheet</p>
                 <br>
                 <label>Sheet Name:</label>
-                <input type="text" id="sheetName" placeholder="Mileage & Refueling" value="Mileage & Refueling">
+                <input type="text" id="sheetName" placeholder="Sheet1" value="Sheet1">
             </div>
             <button onclick="handleAuthClick()">Sign in with Google</button>
         </div>
@@ -1008,24 +1008,38 @@
                             String(now.getMinutes()).padStart(2, '0') + ':' + 
                             String(now.getSeconds()).padStart(2, '0');
             
-            const row = [
+            // First part: columns B-F (date, odometer, milesFill, fuelType, gallons)
+            const firstPart = [
                 data.date,
                 data.odometer,
                 data.milesFill,
                 data.fuelType,
-                data.gallons,
-                '',
+                data.gallons
+            ];
+            
+            // Second part: columns H-J (pricePerGal, location, timestamp)
+            // Skip column G so the formula isn't overwritten
+            const secondPart = [
                 data.pricePerGal,
                 data.location,
                 timestamp
             ];
             
-            const response = await gapi.client.sheets.spreadsheets.values.append({
+            // Use batchUpdate to write both parts in one operation
+            const response = await gapi.client.sheets.spreadsheets.values.batchUpdate({
                 spreadsheetId: spreadsheetId,
-                range: `${sheetName}!B:J`,
-                valueInputOption: 'USER_ENTERED',
                 resource: {
-                    values: [row]
+                    valueInputOption: 'USER_ENTERED',
+                    data: [
+                        {
+                            range: `${sheetName}!B:F`,
+                            values: [firstPart]
+                        },
+                        {
+                            range: `${sheetName}!H:J`,
+                            values: [secondPart]
+                        }
+                    ]
                 }
             });
             
