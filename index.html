@@ -584,19 +584,18 @@
 
     <script src="https://accounts.google.com/gsi/client" async defer></script>
     <script src="https://apis.google.com/js/api.js" async defer></script>
-    
     <script>
-        let tokenClient;
-        let accessToken = null;
-        let lastOdometer = null;
-        let gapiInited = false;
-        let gisInited = false;
-        let driveFolder = null;
+        var tokenClient;
+        var accessToken = null;
+        var lastOdometer = null;
+        var gapiInited = false;
+        var gisInited = false;
+        var driveFolder = null;
         
-        const DISCOVERY_DOC = 'https://sheets.googleapis.com/$discovery/rest?version=v4';
-        const SCOPES = 'https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/drive.file';
+        var DISCOVERY_DOC = 'https://sheets.googleapis.com/$discovery/rest?version=v4';
+        var SCOPES = 'https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/drive.file';
         
-        const isStandalone = window.navigator.standalone || window.matchMedia('(display-mode: standalone)').matches;
+        var isStandalone = window.navigator.standalone || window.matchMedia('(display-mode: standalone)').matches;
         
         function setTodayDate() {
             const today = new Date();
