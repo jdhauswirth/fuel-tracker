@@ -1000,6 +1000,15 @@
             const spreadsheetId = localStorage.getItem('fuelTracker_spreadsheetId');
             const sheetName = localStorage.getItem('fuelTracker_sheetName');
             
+            // First, find the next empty row
+            const response = await gapi.client.sheets.spreadsheets.values.get({
+                spreadsheetId: spreadsheetId,
+                range: `${sheetName}!B:B`,
+            });
+            
+            const values = response.result.values;
+            const nextRow = values ? values.length + 1 : 1;
+            
             const now = new Date();
             const timestamp = now.getFullYear() + '-' + 
                             String(now.getMonth() + 1).padStart(2, '0') + '-' + 
@@ -1025,25 +1034,25 @@
                 timestamp
             ];
             
-            // Use batchUpdate to write both parts in one operation
-            const response = await gapi.client.sheets.spreadsheets.values.batchUpdate({
+            // Use batchUpdate to write both parts to the specific row, skipping column G
+            const batchResponse = await gapi.client.sheets.spreadsheets.values.batchUpdate({
                 spreadsheetId: spreadsheetId,
                 resource: {
                     valueInputOption: 'USER_ENTERED',
                     data: [
                         {
-                            range: `${sheetName}!B:F`,
+                            range: `${sheetName}!B${nextRow}:F${nextRow}`,
                             values: [firstPart]
                         },
                         {
-                            range: `${sheetName}!H:J`,
+                            range: `${sheetName}!H${nextRow}:J${nextRow}`,
                             values: [secondPart]
                         }
                     ]
                 }
             });
             
-            return response;
+            return batchResponse;
         }
         
         window.addEventListener('load', () => {
