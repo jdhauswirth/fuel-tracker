@@ -525,7 +525,6 @@
 
     <script src="https://accounts.google.com/gsi/client" async defer></script>
     <script src="https://apis.google.com/js/api.js" async defer></script>
-
     <script>
         let tokenClient;
         let accessToken = null;
@@ -1000,14 +999,15 @@
             const spreadsheetId = localStorage.getItem('fuelTracker_spreadsheetId');
             const sheetName = localStorage.getItem('fuelTracker_sheetName');
             
-            // First, find the next empty row
+            // First, find the next empty row and get formulas from previous row
             const response = await gapi.client.sheets.spreadsheets.values.get({
                 spreadsheetId: spreadsheetId,
-                range: `${sheetName}!B:B`,
+                range: `${sheetName}!B:Z`,
             });
             
             const values = response.result.values;
             const nextRow = values ? values.length + 1 : 1;
+            const previousRow = nextRow - 1;
             
             const now = new Date();
             const timestamp = now.getFullYear() + '-' + 
@@ -1034,8 +1034,8 @@
                 timestamp
             ];
             
-            // Use batchUpdate to write both parts to the specific row, skipping column G
-            const batchResponse = await gapi.client.sheets.spreadsheets.values.batchUpdate({
+            // Write data to the new row
+            await gapi.client.sheets.spreadsheets.values.batchUpdate({
                 spreadsheetId: spreadsheetId,
                 resource: {
                     valueInputOption: 'USER_ENTERED',
@@ -1052,7 +1052,37 @@
                 }
             });
             
-            return batchResponse;
+            // Copy formulas from previous row to new row (columns G and beyond)
+            if (previousRow > 0) {
+                const copyResponse = await gapi.client.sheets.spreadsheets.batchUpdate({
+                    spreadsheetId: spreadsheetId,
+                    resource: {
+                        requests: [
+                            {
+                                copyPaste: {
+                                    source: {
+                                        sheetId: 0,
+                                        startRowIndex: previousRow - 1,
+                                        endRowIndex: previousRow,
+                                        startColumnIndex: 6,
+                                        endColumnIndex: 26
+                                    },
+                                    destination: {
+                                        sheetId: 0,
+                                        startRowIndex: nextRow - 1,
+                                        endRowIndex: nextRow,
+                                        startColumnIndex: 6,
+                                        endColumnIndex: 26
+                                    },
+                                    pasteType: 'PASTE_FORMULA'
+                                }
+                            }
+                        ]
+                    }
+                });
+                
+                return copyResponse;
+            }
         }
         
         window.addEventListener('load', () => {
