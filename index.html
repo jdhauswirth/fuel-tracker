@@ -7,7 +7,7 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="Fuel Tracker">
     <meta name="mobile-web-app-capable" content="yes">
-    <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' fill='%232E7D32'/><text x='50' y='65' font-size='50' text-anchor='middle' fill='white'>â›½</text></svg>">
+    <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' fill='%232E7D32'/><text x='50' y='65' font-size='50' text-anchor='middle' fill='white'>⛽</text></svg>">
     <link rel="manifest" href="data:application/json;charset=utf-8,%7B%22name%22%3A%22Fuel%20Tracker%22%2C%22short_name%22%3A%22Fuel%22%2C%22display%22%3A%22standalone%22%2C%22background_color%22%3A%22%232E7D32%22%2C%22theme_color%22%3A%22%232E7D32%22%7D">
     <title>Fuel Tracker</title>
     <style>
@@ -323,16 +323,16 @@
                 <p class="info-text">Found in the URL of your spreadsheet</p>
                 <br>
                 <label>Sheet Name:</label>
-                <input type="text" id="sheetName" placeholder="Sheet1" value="Sheet1">
+                <input type="text" id="sheetName" placeholder="Mileage & Refueling" value="Mileage & Refueling">
             </div>
             <button onclick="handleAuthClick()">Sign in with Google</button>
         </div>
         
         <div id="appContent">
             <div class="tabs">
-                <button class="tab active" onclick="showTab('log')">ðŸ" Log Fuel</button>
-                <button class="tab" onclick="showTab('history')">ðŸ"Š History</button>
-                <button class="tab" onclick="showTab('shortcuts')">âš¡ Shortcuts</button>
+                <button class="tab active" onclick="showTab('log')">📝 Log Fuel</button>
+                <button class="tab" onclick="showTab('history')">📊 History</button>
+                <button class="tab" onclick="showTab('shortcuts')">⚡ Shortcuts</button>
             </div>
             
             <div id="logTab" class="tab-content active">
@@ -417,17 +417,17 @@
             </div>
             
             <div id="historyTab" class="tab-content">
-                <button onclick="loadHistory()" style="margin-bottom: 20px;">ðŸ"„ Refresh History</button>
+                <button onclick="loadHistory()" style="margin-bottom: 20px;">🔄 Refresh History</button>
                 <div id="historyList" class="history-list">
                     <p style="text-align: center; color: #999;">Click "Refresh History" to load your fuel stops</p>
                 </div>
             </div>
             
             <div id="shortcutsTab" class="tab-content">
-                <h3 style="margin-bottom: 15px;">âš¡ Auto-Launch at Gas Station</h3>
+                <h3 style="margin-bottom: 15px;">⚡ Auto-Launch at Gas Station</h3>
                 
                 <div style="background: #e8f5e9; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
-                    <p style="margin-bottom: 10px;"><strong>ðŸ"± Add to Home Screen First!</strong></p>
+                    <p style="margin-bottom: 10px;"><strong>📱 Add to Home Screen First!</strong></p>
                     <p style="font-size: 13px; margin: 5px 0;">For best experience:</p>
                     <ol style="font-size: 13px; margin-left: 20px; line-height: 1.6;">
                         <li>In Safari, tap the Share button (square with arrow)</li>
@@ -439,7 +439,7 @@
                 </div>
                 
                 <div style="background: #e3f2fd; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
-                    <p style="margin-bottom: 10px;"><strong>ðŸ" Default Location:</strong></p>
+                    <p style="margin-bottom: 10px;"><strong>📍 Default Location:</strong></p>
                     <p style="font-size: 13px; margin: 5px 0;"><strong>COSTCO MESA</strong></p>
                     <p style="font-size: 13px; margin: 5px 0;">1444 S Sossaman Rd</p>
                     <p style="font-size: 13px; margin: 5px 0;">Mesa, AZ 85209-3400</p>
@@ -448,21 +448,21 @@
                 
                 <div style="background: #fff3e0; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
                     <p style="font-size: 14px; margin-bottom: 10px;">
-                        <strong>ðŸŽ¯ Setup Auto-Launch:</strong><br>
+                        <strong>🎯 Setup Auto-Launch:</strong><br>
                         Create an Apple Shortcut that automatically opens this app when you arrive within 400 meters of your fueling location.
                     </p>
                 </div>
                 
                 <button onclick="window.open('#', '_self')" style="background: #4CAF50; margin-bottom: 10px;">
-                    ðŸš€ Manual Launch App
+                    🚀 Manual Launch App
                 </button>
                 
                 <button onclick="showShortcutInstructions()" style="background: #2196F3;">
-                    ðŸ"– View Setup Instructions
+                    📖 View Setup Instructions
                 </button>
                 
                 <div id="shortcutInstructions" style="display: none; margin-top: 20px; background: #f9f9f9; padding: 20px; border-radius: 8px; font-size: 13px; line-height: 1.6;">
-                    <h4 style="margin-bottom: 15px;">ðŸ"± Apple Shortcuts Setup Guide</h4>
+                    <h4 style="margin-bottom: 15px;">📱 Apple Shortcuts Setup Guide</h4>
                     
                     <p style="margin-bottom: 15px;"><strong>Step 1: Get Your App URL</strong></p>
                     <ol style="margin-left: 20px; margin-bottom: 15px;">
@@ -483,7 +483,7 @@
                     <p style="margin-bottom: 15px;"><strong>Step 3: Create Location Automation</strong></p>
                     <ol style="margin-left: 20px; margin-bottom: 15px;">
                         <li>Go to the <strong>Automation</strong> tab (bottom of Shortcuts app)</li>
-                        <li>Tap <strong>+</strong> â†' <strong>Create Personal Automation</strong></li>
+                        <li>Tap <strong>+</strong> → <strong>Create Personal Automation</strong></li>
                         <li>Select <strong>"Arrive"</strong></li>
                         <li>Tap <strong>"Choose"</strong> next to Location</li>
                         <li>Search for: <strong>1444 S Sossaman Rd, Mesa, AZ 85209</strong></li>
@@ -505,7 +505,7 @@
                     </ol>
                     
                     <div style="background: #e8f5e9; padding: 15px; border-radius: 8px; margin-top: 15px;">
-                        <p style="margin-bottom: 8px;"><strong>âœ… Pro Tips:</strong></p>
+                        <p style="margin-bottom: 8px;"><strong>✅ Pro Tips:</strong></p>
                         <ul style="margin-left: 20px; font-size: 12px;">
                             <li>Add to Home Screen for even faster access</li>
                             <li>Create multiple automations for different Costco locations</li>
@@ -515,7 +515,7 @@
                     </div>
                     
                     <div style="background: #fff3e0; padding: 15px; border-radius: 8px; margin-top: 15px;">
-                        <p style="margin-bottom: 8px;"><strong>ðŸ"§ Adding More Locations:</strong></p>
+                        <p style="margin-bottom: 8px;"><strong>🔧 Adding More Locations:</strong></p>
                         <p style="font-size: 12px;">To add automations for other Costco locations (like COSTCO GSE), repeat Step 3 with the new address. Each location gets its own automation!</p>
                     </div>
                 </div>
@@ -562,7 +562,7 @@
             status.className = `status ${type}`;
             
             if (isStandalone && type === 'success') {
-                status.textContent += ' ðŸ"±';
+                status.textContent += ' 📱';
             }
         }
         
@@ -695,7 +695,7 @@
                     if (lastDate && lastOdometer) {
                         document.getElementById('lastFillInfo').style.display = 'block';
                         document.getElementById('lastFillDetails').innerHTML = 
-                            `ðŸ"… Date: ${lastDate}${daysAgo}<br>ðŸš— Odometer (prior): ${lastOdometer.toLocaleString()} miles`;
+                            `📅 Date: ${lastDate}${daysAgo}<br>🚗 Odometer (prior): ${lastOdometer.toLocaleString()} miles`;
                         showStatus('Last fill-up loaded successfully', 'success');
                     }
                     
@@ -723,13 +723,13 @@
                             
                             if (cleanedPrice && !isNaN(cleanedPrice)) {
                                 const parsedPrice = parseFloat(cleanedPrice);
-                                console.log('  âœ" Parsed price:', parsedPrice);
+                                console.log('  ✓ Parsed price:', parsedPrice);
                                 pricePerGalValues.push(parsedPrice);
                             } else {
-                                console.log('  âœ— Cleaned price is not a valid number');
+                                console.log('  ✗ Cleaned price is not a valid number');
                             }
                         } else {
-                            console.log('  âœ— Price value is empty');
+                            console.log('  ✗ Price value is empty');
                         }
                     }
                     
@@ -746,10 +746,10 @@
                     if (pricePerGalValues.length > 0) {
                         const averagePrice = pricePerGalValues.reduce((a, b) => a + b, 0) / pricePerGalValues.length;
                         document.getElementById('pricePerGal').value = averagePrice.toFixed(3);
-                        console.log('âœ" Average price calculated:', averagePrice.toFixed(3));
-                        console.log('âœ" Set $/Gal field to:', document.getElementById('pricePerGal').value);
+                        console.log('✓ Average price calculated:', averagePrice.toFixed(3));
+                        console.log('✓ Set $/Gal field to:', document.getElementById('pricePerGal').value);
                     } else {
-                        console.log('âœ— No valid price data found in Column H (index 6)');
+                        console.log('✗ No valid price data found in Column H (index 6)');
                         console.log('  Make sure your prices are in Column H of your sheet');
                     }
                     console.log('=== END DEBUGGING ===');
@@ -820,12 +820,12 @@
                         
                         item.innerHTML = `
                             <div class="history-item-date">${row[0]}</div>
-                            <div class="history-item-detail">ðŸš— Odometer: ${row[1]} miles</div>
-                            <div class="history-item-detail">ðŸ" Miles/Fill: ${row[2]} miles</div>
-                            <div class="history-item-detail">â›½ ${costLine}</div>
-                            <div class="history-item-detail">ðŸ"Š MPG: ${row[5]}</div>
-                            <div class="history-item-detail">ðŸ" ${row[7]}</div>
-                            ${row[8] ? '<div class="history-item-detail" style="font-size: 11px; color: #999;">ðŸ• Recorded: ' + row[8] + '</div>' : ''}
+                            <div class="history-item-detail">🚗 Odometer: ${row[1]} miles</div>
+                            <div class="history-item-detail">📏 Miles/Fill: ${row[2]} miles</div>
+                            <div class="history-item-detail">⛽ ${costLine}</div>
+                            <div class="history-item-detail">📊 MPG: ${row[5]}</div>
+                            <div class="history-item-detail">📍 ${row[7]}</div>
+                            ${row[8] ? '<div class="history-item-detail" style="font-size: 11px; color: #999;">🕐 Recorded: ' + row[8] + '</div>' : ''}
                         `;
                         historyList.appendChild(item);
                     }
