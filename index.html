@@ -265,27 +265,34 @@
             margin: 3px 0;
         }
         
-        .upload-area {
-            border: 2px dashed #2E7D32;
-            border-radius: 12px;
-            padding: 40px;
-            text-align: center;
-            cursor: pointer;
-            transition: all 0.3s;
+        .summary-table {
+            width: 100%;
+            border-collapse: collapse;
+            background: white;
+            border-radius: 8px;
+            overflow: hidden;
         }
         
-        .upload-area:hover {
-            background: #f0f0f0;
-            border-color: #388E3C;
+        .summary-table td {
+            padding: 12px;
+            border-bottom: 1px solid #e0e0e0;
+            font-size: 14px;
         }
         
-        .upload-icon {
-            font-size: 48px;
-            margin-bottom: 10px;
+        .summary-table tr:last-child td {
+            border-bottom: none;
         }
         
-        #fileInput {
-            display: none;
+        .summary-label {
+            font-weight: 600;
+            color: #333;
+            width: 60%;
+        }
+        
+        .summary-value {
+            text-align: right;
+            color: #2E7D32;
+            font-weight: 600;
         }
         
         .secondary-btn {
@@ -369,6 +376,7 @@
             <div class="tabs">
                 <button class="tab active" onclick="showTab('log')">📝 Log Fuel</button>
                 <button class="tab" onclick="showTab('history')">📊 History</button>
+                <button class="tab" onclick="showTab('summary')">📈 Summary</button>
                 <button class="tab" onclick="showTab('shortcuts')">⚡ Shortcuts</button>
             </div>
             
@@ -464,6 +472,13 @@
                 <button onclick="loadHistory()" style="margin-bottom: 20px;">🔄 Refresh History</button>
                 <div id="historyList" class="history-list">
                     <p style="text-align: center; color: #999;">Click "Refresh History" to load your fuel stops</p>
+                </div>
+            </div>
+            
+            <div id="summaryTab" class="tab-content">
+                <button onclick="loadSummary()" style="margin-bottom: 20px;">🔄 Refresh Summary</button>
+                <div id="summaryContent" style="background: #f9f9f9; padding: 20px; border-radius: 8px;">
+                    <p style="text-align: center; color: #999;">Click "Refresh Summary" to load statistics</p>
                 </div>
             </div>
             
@@ -753,37 +768,21 @@
                     const pricePerGalValues = [];
                     const startIndex = Math.max(1, dataRows.length - 4);
                     
-                    console.log('=== DEBUGGING PRICE CALCULATION ===');
-                    console.log('Reading data rows from index', startIndex, 'to', dataRows.length - 1);
-                    
                     for (let i = startIndex; i < dataRows.length; i++) {
-                        console.log('Data row', i, ':', dataRows[i]);
-                        
                         const milesFillValue = dataRows[i][2];
                         if (milesFillValue && !isNaN(milesFillValue)) {
                             milesFillValues.push(parseFloat(String(milesFillValue).replace(/,/g, '')));
                         }
                         
                         let priceValue = dataRows[i][6];
-                        console.log('  Column H (index 6) raw value:', priceValue, 'Type:', typeof priceValue);
-                        
                         if (priceValue) {
                             const cleanedPrice = String(priceValue).replace(/[\$,\s]/g, '').trim();
-                            console.log('  Cleaned price:', cleanedPrice);
-                            
                             if (cleanedPrice && !isNaN(cleanedPrice)) {
                                 const parsedPrice = parseFloat(cleanedPrice);
-                                console.log('  ✓ Parsed price:', parsedPrice);
                                 pricePerGalValues.push(parsedPrice);
-                            } else {
-                                console.log('  ✗ Cleaned price is not a valid number');
                             }
-                        } else {
-                            console.log('  ✗ Price value is empty');
                         }
                     }
-                    
-                    console.log('Collected price values:', pricePerGalValues);
                     
                     if (milesFillValues.length > 0) {
                         const averageMilesFill = milesFillValues.reduce(function(a, b) { return a + b; }, 0) / milesFillValues.length;
@@ -796,13 +795,7 @@
                     if (pricePerGalValues.length > 0) {
                         const averagePrice = pricePerGalValues.reduce(function(a, b) { return a + b; }, 0) / pricePerGalValues.length;
                         document.getElementById('pricePerGal').value = averagePrice.toFixed(3);
-                        console.log('✓ Average price calculated:', averagePrice.toFixed(3));
-                        console.log('✓ Set $/Gal field to:', document.getElementById('pricePerGal').value);
-                    } else {
-                        console.log('✗ No valid price data found in Column H (index 6)');
-                        console.log('  Make sure your prices are in Column H of your sheet');
                     }
-                    console.log('=== END DEBUGGING ===');
                     
                     const uniqueLocations = new Set();
                     for (let i = 2; i < dataRows.length; i++) {
@@ -866,7 +859,7 @@
                         
                         const item = document.createElement('div');
                         item.className = 'history-item';
-                        const costLine = row[4] + ' gallons @ ' + row[6] + '/gal = $' + totalCost;
+                        const costLine = row[4] + ' gallons @ ' + row[6] + '/gal =  + totalCost;
                         
                         let htmlContent = '';
                         htmlContent += '<div class="history-item-date">' + row[0] + '</div>';
@@ -894,6 +887,50 @@
             } catch (err) {
                 console.error('Error loading history:', err);
                 showStatus('Error loading history', 'error');
+            }
+        }
+        
+        async function loadSummary() {
+            showStatus('Loading summary statistics...', 'info');
+            try {
+                const spreadsheetId = localStorage.getItem('fuelTracker_spreadsheetId');
+                const sheetName = localStorage.getItem('fuelTracker_sheetName');
+                
+                const response = await gapi.client.sheets.spreadsheets.values.get({
+                    spreadsheetId: spreadsheetId,
+                    range: sheetName + '!R1:S14',
+                });
+                
+                const values = response.result.values;
+                const summaryContent = document.getElementById('summaryContent');
+                
+                if (values && values.length > 0) {
+                    let tableHtml = '<table class="summary-table">';
+                    
+                    for (let i = 0; i < values.length; i++) {
+                        const row = values[i];
+                        const label = row[0] || '';
+                        const value = row[1] || '';
+                        
+                        if (label || value) {
+                            tableHtml += '<tr>';
+                            tableHtml += '<td class="summary-label">' + label + '</td>';
+                            tableHtml += '<td class="summary-value">' + value + '</td>';
+                            tableHtml += '</tr>';
+                        }
+                    }
+                    
+                    tableHtml += '</table>';
+                    summaryContent.innerHTML = tableHtml;
+                    showStatus('Summary loaded!', 'success');
+                } else {
+                    summaryContent.innerHTML = '<p style="text-align: center; color: #999;">No summary data found in range R1:S14</p>';
+                    showStatus('No summary data found', 'info');
+                }
+            } catch (err) {
+                console.error('Error loading summary:', err);
+                summaryContent.innerHTML = '<p style="text-align: center; color: #c62828;">Error loading summary statistics</p>';
+                showStatus('Error loading summary', 'error');
             }
         }
         
@@ -1096,7 +1133,6 @@
                 const fileId = result.id;
                 console.log('Receipt uploaded to Drive:', fileId);
                 
-                // Make the file publicly viewable (anyone with link can view)
                 try {
                     await gapi.client.request({
                         path: '/drive/v3/files/' + fileId + '/permissions',
@@ -1131,17 +1167,13 @@
                 img = document.createElement('img');
                 img.className = 'receipt-image show';
                 
-                // Use Drive thumbnail URL for better compatibility
                 img.src = 'https://drive.google.com/thumbnail?id=' + fileId + '&sz=w800';
                 img.alt = 'Receipt';
                 
-                // Add error handler
                 img.onerror = function() {
                     console.error('Failed to load receipt image with file ID:', fileId);
-                    // Try alternative URL format
                     img.src = 'https://drive.google.com/uc?export=view&id=' + fileId;
                     
-                    // If that also fails
                     img.onerror = function() {
                         console.error('Alternative URL also failed. File ID:', fileId);
                         img.alt = 'Receipt image failed to load. File ID: ' + fileId;
@@ -1149,7 +1181,6 @@
                         img.style.background = '#ffebee';
                         img.style.border = '2px solid #c62828';
                         
-                        // Create a link to open in Drive directly
                         const link = document.createElement('a');
                         link.href = 'https://drive.google.com/file/d/' + fileId + '/view';
                         link.target = '_blank';
@@ -1162,7 +1193,6 @@
                     };
                 };
                 
-                // Add load success handler
                 img.onload = function() {
                     console.log('Receipt image loaded successfully for file ID:', fileId);
                 };
