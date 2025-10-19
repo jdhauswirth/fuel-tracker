@@ -323,7 +323,7 @@
                 <p class="info-text">Found in the URL of your spreadsheet</p>
                 <br>
                 <label>Sheet Name:</label>
-                <input type="text" id="sheetName" placeholder="Sheet1" value="Sheet1">
+                <input type="text" id="sheetName" placeholder="Mileage & Refueling" value="Mileage & Refueling">
             </div>
             <button onclick="handleAuthClick()">Sign in with Google</button>
         </div>
@@ -1024,6 +1024,8 @@
             const previousRow = nextRow - 1;
             
             // Step 1: Copy formulas from previous row to new row FIRST (if there is a previous row)
+            // This copies ALL formulas from columns B-AD including:
+            // G (MPG), K (Day), L (Days between), M (Counter), N (your formula), O (running total), etc.
             if (previousRow > 0) {
                 await gapi.client.sheets.spreadsheets.batchUpdate({
                     spreadsheetId: spreadsheetId,
@@ -1036,14 +1038,14 @@
                                         startRowIndex: previousRow - 1,
                                         endRowIndex: previousRow,
                                         startColumnIndex: 1,
-                                        endColumnIndex: 26
+                                        endColumnIndex: 30
                                     },
                                     destination: {
                                         sheetId: sheetId,
                                         startRowIndex: nextRow - 1,
                                         endRowIndex: nextRow,
                                         startColumnIndex: 1,
-                                        endColumnIndex: 26
+                                        endColumnIndex: 30
                                     },
                                     pasteType: 'PASTE_FORMULA'
                                 }
