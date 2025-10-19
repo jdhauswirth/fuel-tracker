@@ -569,17 +569,17 @@
 
     <script src="https://accounts.google.com/gsi/client" async defer></script>
     <script src="https://apis.google.com/js/api.js" async defer></script>
+    
     <script>
         let tokenClient;
         let accessToken = null;
         let lastOdometer = null;
         let gapiInited = false;
         let gisInited = false;
+        let driveFolder = null;
         
         const DISCOVERY_DOC = 'https://sheets.googleapis.com/$discovery/rest?version=v4';
         const SCOPES = 'https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/drive.file';
-        
-        let driveFolder = null;
         
         const isStandalone = window.navigator.standalone || window.matchMedia('(display-mode: standalone)').matches;
         
@@ -594,14 +594,19 @@
         setTodayDate();
         
         function showTab(tabName) {
-            document.querySelectorAll('.tab-content').forEach(tab => tab.classList.remove('active'));
-            document.querySelectorAll('.tab').forEach(btn => btn.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(function(tab) { 
+                tab.classList.remove('active'); 
+            });
+            document.querySelectorAll('.tab').forEach(function(btn) { 
+                btn.classList.remove('active'); 
+            });
             
             document.getElementById(tabName + 'Tab').classList.add('active');
             event.target.classList.add('active');
         }
         
-        function showStatus(message, type = 'info') {
+        function showStatus(message, type) {
+            if (!type) type = 'info';
             const status = document.getElementById('status');
             status.textContent = message;
             status.className = 'status ' + type;
@@ -659,7 +664,7 @@
                 gisLoaded();
             }
             
-            tokenClient.callback = async (resp) => {
+            tokenClient.callback = async function(resp) {
                 if (resp.error !== undefined) {
                     showStatus('Authentication failed: ' + resp.error, 'error');
                     return;
@@ -697,17 +702,17 @@
                 
                 const response = await gapi.client.sheets.spreadsheets.values.get({
                     spreadsheetId: spreadsheetId,
-                    range: `${sheetName}!B:P`,
+                    range: sheetName + '!B:P',
                 });
                 
                 const values = response.result.values;
                 
-                const dataRows = values ? values.filter(row => 
-                    row && 
-                    row.length >= 2 && 
-                    row[0] && String(row[0]).trim() !== '' &&
-                    row[1] && String(row[1]).trim() !== ''
-                ) : [];
+                const dataRows = values ? values.filter(function(row) {
+                    return row && 
+                        row.length >= 2 && 
+                        row[0] && String(row[0]).trim() !== '' &&
+                        row[1] && String(row[1]).trim() !== '';
+                }) : [];
                 
                 console.log('Total rows returned:', values ? values.length : 0);
                 console.log('Rows with data:', dataRows.length);
@@ -781,7 +786,7 @@
                     console.log('Collected price values:', pricePerGalValues);
                     
                     if (milesFillValues.length > 0) {
-                        const averageMilesFill = milesFillValues.reduce((a, b) => a + b, 0) / milesFillValues.length;
+                        const averageMilesFill = milesFillValues.reduce(function(a, b) { return a + b; }, 0) / milesFillValues.length;
                         const estimatedOdometer = lastOdometer + Math.round(averageMilesFill);
                         document.getElementById('odometer').value = estimatedOdometer.toLocaleString('en-US');
                         document.getElementById('odometerValue').value = estimatedOdometer;
@@ -789,7 +794,7 @@
                     }
                     
                     if (pricePerGalValues.length > 0) {
-                        const averagePrice = pricePerGalValues.reduce((a, b) => a + b, 0) / pricePerGalValues.length;
+                        const averagePrice = pricePerGalValues.reduce(function(a, b) { return a + b; }, 0) / pricePerGalValues.length;
                         document.getElementById('pricePerGal').value = averagePrice.toFixed(3);
                         console.log('✓ Average price calculated:', averagePrice.toFixed(3));
                         console.log('✓ Set $/Gal field to:', document.getElementById('pricePerGal').value);
@@ -811,7 +816,7 @@
                     datalist.innerHTML = 
                         '<option value="COSTCO SOS">' +
                         '<option value="COSTCO GSE">';
-                    uniqueLocations.forEach(location => {
+                    uniqueLocations.forEach(function(location) {
                         if (location !== "COSTCO SOS" && location !== "COSTCO GSE") {
                             const option = document.createElement('option');
                             option.value = location;
@@ -836,17 +841,17 @@
                 
                 const response = await gapi.client.sheets.spreadsheets.values.get({
                     spreadsheetId: spreadsheetId,
-                    range: `${sheetName}!B:P`,
+                    range: sheetName + '!B:P',
                 });
                 
                 const values = response.result.values;
                 
-                const dataRows = values ? values.filter(row => 
-                    row && 
-                    row.length >= 2 && 
-                    row[0] && String(row[0]).trim() !== '' &&
-                    row[1] && String(row[1]).trim() !== ''
-                ) : [];
+                const dataRows = values ? values.filter(function(row) {
+                    return row && 
+                        row.length >= 2 && 
+                        row[0] && String(row[0]).trim() !== '' &&
+                        row[1] && String(row[1]).trim() !== '';
+                }) : [];
                 
                 const historyList = document.getElementById('historyList');
                 historyList.innerHTML = '';
@@ -861,7 +866,36 @@
                         
                         const item = document.createElement('div');
                         item.className = 'history-item';
-                        const costLine = row[4] + ' gallons @ ' + row[6] + '/gal = 
+                        const costLine = row[4] + ' gallons @ ' + row[6] + '/gal = $' + totalCost;
+                        
+                        let htmlContent = '';
+                        htmlContent += '<div class="history-item-date">' + row[0] + '</div>';
+                        htmlContent += '<div class="history-item-detail">🚗 Odometer: ' + row[1] + ' miles</div>';
+                        htmlContent += '<div class="history-item-detail">📏 Miles/Fill: ' + row[2] + ' miles</div>';
+                        htmlContent += '<div class="history-item-detail">⛽ ' + costLine + '</div>';
+                        htmlContent += '<div class="history-item-detail">📊 MPG: ' + row[5] + '</div>';
+                        htmlContent += '<div class="history-item-detail">📍 ' + row[7] + '</div>';
+                        
+                        if (row[8]) {
+                            htmlContent += '<div class="history-item-detail" style="font-size: 11px; color: #999;">🕐 Recorded: ' + row[8] + '</div>';
+                        }
+                        
+                        if (receiptFileId) {
+                            htmlContent += '<button class="receipt-btn" onclick="toggleReceiptImage(\'' + receiptFileId + '\', this)">📷 View Receipt</button>';
+                        }
+                        
+                        item.innerHTML = htmlContent;
+                        historyList.appendChild(item);
+                    }
+                    showStatus('History loaded!', 'success');
+                } else {
+                    historyList.innerHTML = '<p style="text-align: center; color: #999;">No fuel stops found</p>';
+                }
+            } catch (err) {
+                console.error('Error loading history:', err);
+                showStatus('Error loading history', 'error');
+            }
+        }
         
         function showShortcutInstructions() {
             const instructions = document.getElementById('shortcutInstructions');
@@ -1085,7 +1119,7 @@
             }
         }
         
-        document.getElementById('fuelForm').addEventListener('submit', async (e) => {
+        document.getElementById('fuelForm').addEventListener('submit', async function(e) {
             e.preventDefault();
             
             const currentOdometer = parseFloat(document.getElementById('odometerValue').value);
@@ -1138,7 +1172,7 @@
                 document.getElementById('odometer').value = '';
                 document.getElementById('odometerValue').value = '';
                 
-                setTimeout(() => {
+                setTimeout(function() {
                     showStatus('Ready for next entry', 'info');
                 }, 2000);
                 
@@ -1152,21 +1186,19 @@
             const spreadsheetId = localStorage.getItem('fuelTracker_spreadsheetId');
             const sheetName = localStorage.getItem('fuelTracker_sheetName');
             
-            // First, get the sheet metadata to find the sheetId
             const sheetMetadata = await gapi.client.sheets.spreadsheets.get({
                 spreadsheetId: spreadsheetId
             });
             
-            // Find the correct sheet by name
             let sheetId = 0;
-            for (let sheet of sheetMetadata.result.sheets) {
+            for (let i = 0; i < sheetMetadata.result.sheets.length; i++) {
+                const sheet = sheetMetadata.result.sheets[i];
                 if (sheet.properties.title === sheetName) {
                     sheetId = sheet.properties.sheetId;
                     break;
                 }
             }
             
-            // Find the next empty row
             const response = await gapi.client.sheets.spreadsheets.values.get({
                 spreadsheetId: spreadsheetId,
                 range: sheetName + '!B:Z',
@@ -1176,9 +1208,6 @@
             const nextRow = values ? values.length + 1 : 1;
             const previousRow = nextRow - 1;
             
-            // Step 1: Copy formulas from previous row to new row FIRST (if there is a previous row)
-            // This copies ALL formulas from columns B-AD including:
-            // G (MPG), K (Day), L (Days between), M (Counter), N (your formula), O (running total), etc.
             if (previousRow > 0) {
                 await gapi.client.sheets.spreadsheets.batchUpdate({
                     spreadsheetId: spreadsheetId,
@@ -1216,7 +1245,6 @@
                             String(now.getMinutes()).padStart(2, '0') + ':' + 
                             String(now.getSeconds()).padStart(2, '0');
             
-            // Step 2: Now write the actual data (formulas are already in place)
             const firstPart = [
                 data.date,
                 data.odometer,
@@ -1231,7 +1259,6 @@
                 timestamp
             ];
             
-            // Prepare batch data
             const batchData = [
                 {
                     range: sheetName + '!B' + nextRow + ':F' + nextRow,
@@ -1243,7 +1270,6 @@
                 }
             ];
             
-            // Add receipt file ID to column P if it exists
             if (data.receiptFileId) {
                 batchData.push({
                     range: sheetName + '!P' + nextRow,
@@ -1251,7 +1277,6 @@
                 });
             }
             
-            // Write data to the new row (formulas in G, K, L, M, N, O are already there)
             const batchResponse = await gapi.client.sheets.spreadsheets.values.batchUpdate({
                 spreadsheetId: spreadsheetId,
                 resource: {
@@ -1276,453 +1301,6 @@
         });
         
         window.addEventListener('load', function() {
-            if (typeof gapi !== 'undefined') {
-                gapiLoaded();
-            }
-            if (typeof google !== 'undefined') {
-                gisLoaded();
-            }
-        });
-    </script>
-</body>
-</html> + totalCost;
-                        
-                        let receiptButton = '';
-                        if (receiptFileId) {
-                            receiptButton = `<button class="receipt-btn" onclick="toggleReceiptImage('${receiptFileId}', this)">📷 View Receipt</button>`;
-                        }
-                        
-                        item.innerHTML = `
-                            <div class="history-item-date">${row[0]}</div>
-                            <div class="history-item-detail">🚗 Odometer: ${row[1]} miles</div>
-                            <div class="history-item-detail">📏 Miles/Fill: ${row[2]} miles</div>
-                            <div class="history-item-detail">⛽ ${costLine}</div>
-                            <div class="history-item-detail">📊 MPG: ${row[5]}</div>
-                            <div class="history-item-detail">📍 ${row[7]}</div>
-                            ${row[8] ? '<div class="history-item-detail" style="font-size: 11px; color: #999;">🕐 Recorded: ' + row[8] + '</div>' : ''}
-                            ${receiptButton}
-                        `;
-                        historyList.appendChild(item);
-                    }
-                    showStatus('History loaded!', 'success');
-                } else {
-                    historyList.innerHTML = '<p style="text-align: center; color: #999;">No fuel stops found</p>';
-                }
-            } catch (err) {
-                console.error('Error loading history:', err);
-                showStatus('Error loading history', 'error');
-            }
-        }
-        
-        function showShortcutInstructions() {
-            const instructions = document.getElementById('shortcutInstructions');
-            if (instructions.style.display === 'none') {
-                instructions.style.display = 'block';
-            } else {
-                instructions.style.display = 'none';
-            }
-        }
-        
-        function adjustOdometer(amount) {
-            const currentValue = parseFloat(document.getElementById('odometerValue').value) || 0;
-            const newValue = currentValue + amount;
-            if (newValue >= 0) {
-                document.getElementById('odometer').value = newValue.toLocaleString('en-US');
-                document.getElementById('odometerValue').value = newValue;
-                calculateValues();
-            }
-        }
-        
-        function adjustPrice(amount) {
-            const currentValue = parseFloat(document.getElementById('pricePerGal').value) || 0;
-            const newValue = currentValue + amount;
-            if (newValue >= 0) {
-                document.getElementById('pricePerGal').value = newValue.toFixed(3);
-            }
-        }
-        
-        function adjustGallons(amount) {
-            const currentValue = parseFloat(document.getElementById('gallons').value) || 0;
-            const newValue = currentValue + amount;
-            if (newValue >= 0) {
-                document.getElementById('gallons').value = newValue.toFixed(3);
-                calculateMPG();
-            }
-        }
-        
-        function adjustMilesFill(amount) {
-            const currentValue = parseFloat(document.getElementById('milesFill').value) || 0;
-            const newValue = currentValue + amount;
-            if (newValue >= 0) {
-                document.getElementById('milesFill').value = newValue.toFixed(1);
-                const milesFill = newValue;
-                const expectedGallons = milesFill / 26.1;
-                document.getElementById('gallons').value = expectedGallons.toFixed(3);
-                calculateMPG();
-            }
-        }
-        
-        document.getElementById('odometer').addEventListener('input', function(e) {
-            let value = e.target.value.replace(/,/g, '');
-            if (value && !isNaN(value)) {
-                const numValue = parseFloat(value);
-                document.getElementById('odometerValue').value = numValue;
-                e.target.value = numValue.toLocaleString('en-US');
-            } else {
-                document.getElementById('odometerValue').value = '';
-            }
-            calculateValues();
-        });
-        
-        document.getElementById('location').addEventListener('input', function(e) {
-            e.target.value = e.target.value.toUpperCase();
-        });
-        
-        document.getElementById('receipt').addEventListener('change', function(e) {
-            const file = e.target.files[0];
-            const preview = document.getElementById('receiptPreview');
-            
-            if (file) {
-                const reader = new FileReader();
-                reader.onload = function(event) {
-                    preview.innerHTML = `<img src="${event.target.result}" alt="Receipt Preview">`;
-                };
-                reader.readAsDataURL(file);
-            } else {
-                preview.innerHTML = '';
-            }
-        });
-        
-        document.getElementById('milesFill').addEventListener('input', function(e) {
-            const milesFill = parseFloat(e.target.value);
-            if (milesFill > 0) {
-                const expectedGallons = milesFill / 26.1;
-                document.getElementById('gallons').value = expectedGallons.toFixed(3);
-                calculateMPG();
-            }
-        });
-        
-        document.getElementById('gallons').addEventListener('input', calculateMPG);
-        
-        function calculateValues() {
-            const odometerStr = document.getElementById('odometerValue').value;
-            const odometer = parseFloat(odometerStr);
-            
-            if (lastOdometer && odometer && odometer <= lastOdometer) {
-                showStatus('Error: Current odometer must be greater than prior odometer (' + lastOdometer.toLocaleString() + ')', 'error');
-                document.getElementById('milesFill').value = '';
-                document.getElementById('gallons').value = '13.500';
-                document.getElementById('mpg').value = '';
-                return;
-            }
-            
-            if (lastOdometer && odometer && odometer > lastOdometer) {
-                const milesFill = odometer - lastOdometer;
-                document.getElementById('milesFill').value = milesFill.toFixed(1);
-                
-                const expectedGallons = milesFill / 26.1;
-                document.getElementById('gallons').value = expectedGallons.toFixed(3);
-                
-                const mpg = milesFill / expectedGallons;
-                document.getElementById('mpg').value = mpg.toFixed(2);
-                
-                showStatus('Ready for next entry', 'info');
-            }
-        }
-        
-        function calculateMPG() {
-            const milesFill = parseFloat(document.getElementById('milesFill').value);
-            const gallons = parseFloat(document.getElementById('gallons').value);
-            
-            if (milesFill > 0 && gallons > 0) {
-                const mpg = milesFill / gallons;
-                document.getElementById('mpg').value = mpg.toFixed(2);
-            }
-        }
-        
-        async function getOrCreateDriveFolder() {
-            if (driveFolder) return driveFolder;
-            
-            try {
-                const response = await gapi.client.request({
-                    path: '/drive/v3/files',
-                    method: 'GET',
-                    params: {
-                        q: "name='Fuel Receipts' and mimeType='application/vnd.google-apps.folder' and trashed=false",
-                        fields: 'files(id, name)'
-                    }
-                });
-                
-                if (response.result.files && response.result.files.length > 0) {
-                    driveFolder = response.result.files[0].id;
-                    console.log('Found existing Fuel Receipts folder:', driveFolder);
-                    return driveFolder;
-                }
-                
-                const createResponse = await gapi.client.request({
-                    path: '/drive/v3/files',
-                    method: 'POST',
-                    body: {
-                        name: 'Fuel Receipts',
-                        mimeType: 'application/vnd.google-apps.folder'
-                    }
-                });
-                
-                driveFolder = createResponse.result.id;
-                console.log('Created new Fuel Receipts folder:', driveFolder);
-                return driveFolder;
-                
-            } catch (error) {
-                console.error('Error with Drive folder:', error);
-                throw error;
-            }
-        }
-        
-        async function uploadReceiptToDrive(file, fuelDate) {
-            if (!file) return null;
-            
-            try {
-                const folderId = await getOrCreateDriveFolder();
-                
-                const timestamp = new Date().getTime();
-                const fileName = `Receipt_${fuelDate}_${timestamp}.jpg`;
-                
-                const metadata = {
-                    name: fileName,
-                    mimeType: file.type,
-                    parents: [folderId]
-                };
-                
-                const formData = new FormData();
-                formData.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
-                formData.append('file', file);
-                
-                const response = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id', {
-                    method: 'POST',
-                    headers: {
-                        'Authorization': 'Bearer ' + accessToken
-                    },
-                    body: formData
-                });
-                
-                const result = await response.json();
-                console.log('Receipt uploaded to Drive:', result.id);
-                return result.id;
-                
-            } catch (error) {
-                console.error('Error uploading receipt:', error);
-                throw error;
-            }
-        }
-        
-        function toggleReceiptImage(fileId, buttonElement) {
-            const container = buttonElement.parentElement;
-            let img = container.querySelector('.receipt-image');
-            
-            if (img) {
-                img.classList.toggle('show');
-                buttonElement.textContent = img.classList.contains('show') ? '📷 Hide Receipt' : '📷 View Receipt';
-            } else {
-                img = document.createElement('img');
-                img.className = 'receipt-image show';
-                img.src = `https://drive.google.com/uc?id=${fileId}`;
-                img.alt = 'Receipt';
-                container.appendChild(img);
-                buttonElement.textContent = '📷 Hide Receipt';
-            }
-        }
-        
-        document.getElementById('fuelForm').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            
-            const currentOdometer = parseFloat(document.getElementById('odometerValue').value);
-            
-            if (lastOdometer && currentOdometer <= lastOdometer) {
-                showStatus('Cannot submit: Current odometer must be greater than prior odometer', 'error');
-                return;
-            }
-            
-            const dateValue = document.getElementById('date').value;
-            const receiptFile = document.getElementById('receipt').files[0];
-            
-            showStatus('Saving to Google Sheets...', 'info');
-            
-            let receiptFileId = null;
-            
-            if (receiptFile) {
-                try {
-                    showStatus('Uploading receipt image...', 'info');
-                    receiptFileId = await uploadReceiptToDrive(receiptFile, dateValue);
-                } catch (error) {
-                    console.error('Receipt upload failed:', error);
-                    showStatus('Warning: Receipt upload failed, but continuing to save data', 'error');
-                }
-            }
-            
-            const formData = {
-                date: dateValue,
-                odometer: currentOdometer,
-                milesFill: parseFloat(document.getElementById('milesFill').value) || '',
-                fuelType: document.getElementById('fuelType').value,
-                gallons: parseFloat(document.getElementById('gallons').value),
-                pricePerGal: parseFloat(document.getElementById('pricePerGal').value),
-                location: document.getElementById('location').value,
-                receiptFileId: receiptFileId
-            };
-            
-            try {
-                await writeToSheet(formData);
-                showStatus('Fuel stop logged successfully!', 'success');
-                
-                lastOdometer = formData.odometer;
-                
-                document.getElementById('fuelForm').reset();
-                document.getElementById('receiptPreview').innerHTML = '';
-                setTodayDate();
-                document.getElementById('fuelType').value = 'R87';
-                document.getElementById('gallons').value = '13.500';
-                document.getElementById('location').value = 'COSTCO SOS';
-                document.getElementById('odometer').value = '';
-                document.getElementById('odometerValue').value = '';
-                
-                setTimeout(() => {
-                    showStatus('Ready for next entry', 'info');
-                }, 2000);
-                
-            } catch (error) {
-                showStatus('Error saving: ' + error.message, 'error');
-                console.error('Save error:', error);
-            }
-        });
-        
-        async function writeToSheet(data) {
-            const spreadsheetId = localStorage.getItem('fuelTracker_spreadsheetId');
-            const sheetName = localStorage.getItem('fuelTracker_sheetName');
-            
-            // First, get the sheet metadata to find the sheetId
-            const sheetMetadata = await gapi.client.sheets.spreadsheets.get({
-                spreadsheetId: spreadsheetId
-            });
-            
-            // Find the correct sheet by name
-            let sheetId = 0;
-            for (let sheet of sheetMetadata.result.sheets) {
-                if (sheet.properties.title === sheetName) {
-                    sheetId = sheet.properties.sheetId;
-                    break;
-                }
-            }
-            
-            // Find the next empty row
-            const response = await gapi.client.sheets.spreadsheets.values.get({
-                spreadsheetId: spreadsheetId,
-                range: `${sheetName}!B:Z`,
-            });
-            
-            const values = response.result.values;
-            const nextRow = values ? values.length + 1 : 1;
-            const previousRow = nextRow - 1;
-            
-            // Step 1: Copy formulas from previous row to new row FIRST (if there is a previous row)
-            // This copies ALL formulas from columns B-AD including:
-            // G (MPG), K (Day), L (Days between), M (Counter), N (your formula), O (running total), etc.
-            if (previousRow > 0) {
-                await gapi.client.sheets.spreadsheets.batchUpdate({
-                    spreadsheetId: spreadsheetId,
-                    resource: {
-                        requests: [
-                            {
-                                copyPaste: {
-                                    source: {
-                                        sheetId: sheetId,
-                                        startRowIndex: previousRow - 1,
-                                        endRowIndex: previousRow,
-                                        startColumnIndex: 1,
-                                        endColumnIndex: 30
-                                    },
-                                    destination: {
-                                        sheetId: sheetId,
-                                        startRowIndex: nextRow - 1,
-                                        endRowIndex: nextRow,
-                                        startColumnIndex: 1,
-                                        endColumnIndex: 30
-                                    },
-                                    pasteType: 'PASTE_FORMULA'
-                                }
-                            }
-                        ]
-                    }
-                });
-            }
-            
-            const now = new Date();
-            const timestamp = now.getFullYear() + '-' + 
-                            String(now.getMonth() + 1).padStart(2, '0') + '-' + 
-                            String(now.getDate()).padStart(2, '0') + ' ' + 
-                            String(now.getHours()).padStart(2, '0') + ':' + 
-                            String(now.getMinutes()).padStart(2, '0') + ':' + 
-                            String(now.getSeconds()).padStart(2, '0');
-            
-            // Step 2: Now write the actual data (formulas are already in place)
-            const firstPart = [
-                data.date,
-                data.odometer,
-                data.milesFill,
-                data.fuelType,
-                data.gallons
-            ];
-            
-            const secondPart = [
-                data.pricePerGal,
-                data.location,
-                timestamp
-            ];
-            
-            // Prepare batch data
-            const batchData = [
-                {
-                    range: `${sheetName}!B${nextRow}:F${nextRow}`,
-                    values: [firstPart]
-                },
-                {
-                    range: `${sheetName}!H${nextRow}:J${nextRow}`,
-                    values: [secondPart]
-                }
-            ];
-            
-            // Add receipt file ID to column P if it exists
-            if (data.receiptFileId) {
-                batchData.push({
-                    range: `${sheetName}!P${nextRow}`,
-                    values: [[data.receiptFileId]]
-                });
-            }
-            
-            // Write data to the new row (formulas in G, K, L, M, N, O are already there)
-            const batchResponse = await gapi.client.sheets.spreadsheets.values.batchUpdate({
-                spreadsheetId: spreadsheetId,
-                resource: {
-                    valueInputOption: 'USER_ENTERED',
-                    data: batchData
-                }
-            });
-            
-            return batchResponse;
-        }
-        
-        window.addEventListener('load', () => {
-            const savedClientId = localStorage.getItem('fuelTracker_clientId');
-            const savedApiKey = localStorage.getItem('fuelTracker_apiKey');
-            const savedSpreadsheetId = localStorage.getItem('fuelTracker_spreadsheetId');
-            const savedSheetName = localStorage.getItem('fuelTracker_sheetName');
-            
-            if (savedClientId) document.getElementById('clientId').value = savedClientId;
-            if (savedApiKey) document.getElementById('apiKey').value = savedApiKey;
-            if (savedSpreadsheetId) document.getElementById('spreadsheetId').value = savedSpreadsheetId;
-            if (savedSheetName) document.getElementById('sheetName').value = savedSheetName;
-        });
-        
-        window.addEventListener('load', () => {
             if (typeof gapi !== 'undefined') {
                 gapiLoaded();
             }
