@@ -999,7 +999,21 @@
             const spreadsheetId = localStorage.getItem('fuelTracker_spreadsheetId');
             const sheetName = localStorage.getItem('fuelTracker_sheetName');
             
-            // First, find the next empty row and get formulas from previous row
+            // First, get the sheet metadata to find the sheetId
+            const sheetMetadata = await gapi.client.sheets.spreadsheets.get({
+                spreadsheetId: spreadsheetId
+            });
+            
+            // Find the correct sheet by name
+            let sheetId = 0;
+            for (let sheet of sheetMetadata.result.sheets) {
+                if (sheet.properties.title === sheetName) {
+                    sheetId = sheet.properties.sheetId;
+                    break;
+                }
+            }
+            
+            // Find the next empty row
             const response = await gapi.client.sheets.spreadsheets.values.get({
                 spreadsheetId: spreadsheetId,
                 range: `${sheetName}!B:Z`,
@@ -1009,6 +1023,36 @@
             const nextRow = values ? values.length + 1 : 1;
             const previousRow = nextRow - 1;
             
+            // Step 1: Copy formulas from previous row to new row FIRST (if there is a previous row)
+            if (previousRow > 0) {
+                await gapi.client.sheets.spreadsheets.batchUpdate({
+                    spreadsheetId: spreadsheetId,
+                    resource: {
+                        requests: [
+                            {
+                                copyPaste: {
+                                    source: {
+                                        sheetId: sheetId,
+                                        startRowIndex: previousRow - 1,
+                                        endRowIndex: previousRow,
+                                        startColumnIndex: 1,
+                                        endColumnIndex: 26
+                                    },
+                                    destination: {
+                                        sheetId: sheetId,
+                                        startRowIndex: nextRow - 1,
+                                        endRowIndex: nextRow,
+                                        startColumnIndex: 1,
+                                        endColumnIndex: 26
+                                    },
+                                    pasteType: 'PASTE_FORMULA'
+                                }
+                            }
+                        ]
+                    }
+                });
+            }
+            
             const now = new Date();
             const timestamp = now.getFullYear() + '-' + 
                             String(now.getMonth() + 1).padStart(2, '0') + '-' + 
@@ -1017,7 +1061,7 @@
                             String(now.getMinutes()).padStart(2, '0') + ':' + 
                             String(now.getSeconds()).padStart(2, '0');
             
-            // First part: columns B-F (date, odometer, milesFill, fuelType, gallons)
+            // Step 2: Now write the actual data (formulas are already in place)
             const firstPart = [
                 data.date,
                 data.odometer,
@@ -1026,16 +1070,14 @@
                 data.gallons
             ];
             
-            // Second part: columns H-J (pricePerGal, location, timestamp)
-            // Skip column G so the formula isn't overwritten
             const secondPart = [
                 data.pricePerGal,
                 data.location,
                 timestamp
             ];
             
-            // Write data to the new row
-            await gapi.client.sheets.spreadsheets.values.batchUpdate({
+            // Write data to the new row (formulas in G, K, L, M are already there)
+            const batchResponse = await gapi.client.sheets.spreadsheets.values.batchUpdate({
                 spreadsheetId: spreadsheetId,
                 resource: {
                     valueInputOption: 'USER_ENTERED',
@@ -1052,37 +1094,7 @@
                 }
             });
             
-            // Copy formulas from previous row to new row (columns G and beyond)
-            if (previousRow > 0) {
-                const copyResponse = await gapi.client.sheets.spreadsheets.batchUpdate({
-                    spreadsheetId: spreadsheetId,
-                    resource: {
-                        requests: [
-                            {
-                                copyPaste: {
-                                    source: {
-                                        sheetId: 0,
-                                        startRowIndex: previousRow - 1,
-                                        endRowIndex: previousRow,
-                                        startColumnIndex: 6,
-                                        endColumnIndex: 26
-                                    },
-                                    destination: {
-                                        sheetId: 0,
-                                        startRowIndex: nextRow - 1,
-                                        endRowIndex: nextRow,
-                                        startColumnIndex: 6,
-                                        endColumnIndex: 26
-                                    },
-                                    pasteType: 'PASTE_FORMULA'
-                                }
-                            }
-                        ]
-                    }
-                });
-                
-                return copyResponse;
-            }
+            return batchResponse;
         }
         
         window.addEventListener('load', () => {
