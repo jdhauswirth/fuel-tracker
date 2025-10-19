@@ -632,37 +632,61 @@
         }
         
         function gapiLoaded() {
+            console.log('GAPI script loaded');
             gapi.load('client', initializeGapiClient);
         }
         
         async function initializeGapiClient() {
+            console.log('Initializing GAPI client');
             const apiKey = localStorage.getItem('fuelTracker_apiKey') || document.getElementById('apiKey').value;
-            if (!apiKey) return;
+            if (!apiKey) {
+                console.log('No API key found');
+                return;
+            }
             
-            await gapi.client.init({
-                apiKey: apiKey,
-                discoveryDocs: [DISCOVERY_DOC],
-            });
-            gapiInited = true;
+            try {
+                await gapi.client.init({
+                    apiKey: apiKey,
+                    discoveryDocs: [DISCOVERY_DOC],
+                });
+                gapiInited = true;
+                console.log('GAPI client initialized successfully');
+            } catch (error) {
+                console.error('Error initializing GAPI client:', error);
+            }
         }
         
         function gisLoaded() {
+            console.log('GIS script loaded');
             const clientId = localStorage.getItem('fuelTracker_clientId') || document.getElementById('clientId').value;
-            if (!clientId) return;
+            if (!clientId) {
+                console.log('No Client ID found');
+                return;
+            }
             
-            tokenClient = google.accounts.oauth2.initTokenClient({
-                client_id: clientId,
-                scope: SCOPES,
-                callback: ''
-            });
-            gisInited = true;
+            try {
+                tokenClient = google.accounts.oauth2.initTokenClient({
+                    client_id: clientId,
+                    scope: SCOPES,
+                    callback: ''
+                });
+                gisInited = true;
+                console.log('GIS initialized successfully');
+            } catch (error) {
+                console.error('Error initializing GIS:', error);
+            }
         }
         
         function handleAuthClick() {
+            console.log('Auth button clicked');
             const clientId = document.getElementById('clientId').value.trim();
             const apiKey = document.getElementById('apiKey').value.trim();
             const spreadsheetId = document.getElementById('spreadsheetId').value.trim();
             const sheetName = document.getElementById('sheetName').value.trim();
+            
+            console.log('ClientId:', clientId ? 'Present' : 'Missing');
+            console.log('ApiKey:', apiKey ? 'Present' : 'Missing');
+            console.log('SpreadsheetId:', spreadsheetId ? 'Present' : 'Missing');
             
             if (!clientId || !apiKey || !spreadsheetId) {
                 showStatus('Please fill in all configuration fields', 'error');
@@ -674,29 +698,66 @@
             localStorage.setItem('fuelTracker_spreadsheetId', spreadsheetId);
             localStorage.setItem('fuelTracker_sheetName', sheetName);
             
+            console.log('gapiInited:', gapiInited, 'gisInited:', gisInited);
+            
             if (!gapiInited || !gisInited) {
-                initializeGapiClient();
-                gisLoaded();
+                console.log('Reinitializing APIs');
+                if (!gapiInited && typeof gapi !== 'undefined') {
+                    gapiLoaded();
+                }
+                if (!gisInited && typeof google !== 'undefined') {
+                    gisLoaded();
+                }
+                
+                setTimeout(function() {
+                    if (!gapiInited || !gisInited) {
+                        showStatus('Google APIs not loaded. Please refresh the page.', 'error');
+                        console.error('APIs failed to initialize');
+                        return;
+                    }
+                    handleAuthClick();
+                }, 2000);
+                return;
             }
             
+            if (!tokenClient) {
+                showStatus('Token client not initialized. Please refresh the page.', 'error');
+                console.error('tokenClient is null');
+                return;
+            }
+            
+            console.log('Setting up token callback');
             tokenClient.callback = async function(resp) {
+                console.log('Token callback received:', resp);
                 if (resp.error !== undefined) {
                     showStatus('Authentication failed: ' + resp.error, 'error');
+                    console.error('Auth error:', resp);
                     return;
                 }
                 
                 accessToken = resp.access_token;
+                console.log('Access token received');
                 document.getElementById('loginSection').style.display = 'none';
                 document.getElementById('appContent').style.display = 'block';
                 showStatus('Signed in successfully!', 'success');
                 
-                await loadLastOdometer();
+                try {
+                    await loadLastOdometer();
+                } catch (error) {
+                    console.error('Error loading last odometer:', error);
+                }
             };
             
-            if (accessToken === null) {
-                tokenClient.requestAccessToken({prompt: 'consent'});
-            } else {
-                tokenClient.requestAccessToken({prompt: ''});
+            console.log('Requesting access token');
+            try {
+                if (accessToken === null) {
+                    tokenClient.requestAccessToken({prompt: 'consent'});
+                } else {
+                    tokenClient.requestAccessToken({prompt: ''});
+                }
+            } catch (error) {
+                console.error('Error requesting access token:', error);
+                showStatus('Error requesting access: ' + error.message, 'error');
             }
         }
         
@@ -1372,6 +1433,7 @@
         }
         
         window.addEventListener('load', function() {
+            console.log('Page loaded');
             const savedClientId = localStorage.getItem('fuelTracker_clientId');
             const savedApiKey = localStorage.getItem('fuelTracker_apiKey');
             const savedSpreadsheetId = localStorage.getItem('fuelTracker_spreadsheetId');
@@ -1381,15 +1443,26 @@
             if (savedApiKey) document.getElementById('apiKey').value = savedApiKey;
             if (savedSpreadsheetId) document.getElementById('spreadsheetId').value = savedSpreadsheetId;
             if (savedSheetName) document.getElementById('sheetName').value = savedSheetName;
-        });
-        
-        window.addEventListener('load', function() {
-            if (typeof gapi !== 'undefined') {
-                gapiLoaded();
-            }
-            if (typeof google !== 'undefined') {
-                gisLoaded();
-            }
+            
+            setTimeout(function() {
+                console.log('Checking API loading status:');
+                console.log('- gapi defined:', typeof gapi !== 'undefined');
+                console.log('- google defined:', typeof google !== 'undefined');
+                console.log('- gapiInited:', gapiInited);
+                console.log('- gisInited:', gisInited);
+                
+                if (typeof gapi !== 'undefined') {
+                    gapiLoaded();
+                } else {
+                    console.error('GAPI not loaded after 3 seconds');
+                }
+                
+                if (typeof google !== 'undefined') {
+                    gisLoaded();
+                } else {
+                    console.error('GIS not loaded after 3 seconds');
+                }
+            }, 3000);
         });
     </script>
 </body>
