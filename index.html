@@ -1093,8 +1093,26 @@
                 });
                 
                 const result = await response.json();
-                console.log('Receipt uploaded to Drive:', result.id);
-                return result.id;
+                const fileId = result.id;
+                console.log('Receipt uploaded to Drive:', fileId);
+                
+                // Make the file publicly viewable (anyone with link can view)
+                try {
+                    await gapi.client.request({
+                        path: '/drive/v3/files/' + fileId + '/permissions',
+                        method: 'POST',
+                        body: {
+                            role: 'reader',
+                            type: 'anyone'
+                        }
+                    });
+                    console.log('Receipt file set to public (anyone with link)');
+                } catch (permError) {
+                    console.error('Error setting file permissions:', permError);
+                    showStatus('Warning: Receipt uploaded but may not be viewable', 'error');
+                }
+                
+                return fileId;
                 
             } catch (error) {
                 console.error('Error uploading receipt:', error);
@@ -1112,8 +1130,43 @@
             } else {
                 img = document.createElement('img');
                 img.className = 'receipt-image show';
-                img.src = 'https://drive.google.com/uc?id=' + fileId;
+                
+                // Use Drive thumbnail URL for better compatibility
+                img.src = 'https://drive.google.com/thumbnail?id=' + fileId + '&sz=w800';
                 img.alt = 'Receipt';
+                
+                // Add error handler
+                img.onerror = function() {
+                    console.error('Failed to load receipt image with file ID:', fileId);
+                    // Try alternative URL format
+                    img.src = 'https://drive.google.com/uc?export=view&id=' + fileId;
+                    
+                    // If that also fails
+                    img.onerror = function() {
+                        console.error('Alternative URL also failed. File ID:', fileId);
+                        img.alt = 'Receipt image failed to load. File ID: ' + fileId;
+                        img.style.padding = '20px';
+                        img.style.background = '#ffebee';
+                        img.style.border = '2px solid #c62828';
+                        
+                        // Create a link to open in Drive directly
+                        const link = document.createElement('a');
+                        link.href = 'https://drive.google.com/file/d/' + fileId + '/view';
+                        link.target = '_blank';
+                        link.textContent = '📂 Open in Google Drive';
+                        link.style.display = 'block';
+                        link.style.marginTop = '10px';
+                        link.style.color = '#2196F3';
+                        link.style.textDecoration = 'underline';
+                        container.appendChild(link);
+                    };
+                };
+                
+                // Add load success handler
+                img.onload = function() {
+                    console.log('Receipt image loaded successfully for file ID:', fileId);
+                };
+                
                 container.appendChild(img);
                 buttonElement.textContent = '📷 Hide Receipt';
             }
