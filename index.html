@@ -546,6 +546,15 @@
             
             document.getElementById(tabName + 'Tab').classList.add('active');
             event.target.classList.add('active');
+            
+            // Auto-refresh data when switching to tabs
+            if (accessToken) {
+                if (tabName === 'summary') {
+                    loadSummary();
+                } else if (tabName === 'history') {
+                    loadHistory();
+                }
+            }
         }
         
         function showStatus(message, type) {
@@ -887,15 +896,15 @@
                 html += '</div>';
                 html += '<div class="summary-stat">';
                 html += '<div class="summary-stat-label">Total Fuel Ups</div>';
-                html += '<div class="summary-stat-value">' + formatNumber(stats.fuelUps) + '</div>';
+                html += '<div class="summary-stat-value">' + formatNumber(stats.fuelUps, 0) + '</div>';
                 html += '</div>';
                 html += '<div class="summary-stat">';
                 html += '<div class="summary-stat-label">Average Miles Between Refueling</div>';
-                html += '<div class="summary-stat-value">' + formatNumber(stats.avgMilesBetweenFill) + '</div>';
+                html += '<div class="summary-stat-value">' + formatNumber(stats.avgMilesBetweenFill, 1) + '</div>';
                 html += '</div>';
                 html += '<div class="summary-stat">';
                 html += '<div class="summary-stat-label">Average Miles Per Day (since 10/04/2024)</div>';
-                html += '<div class="summary-stat-value">' + formatNumber(stats.avgMilesPerDay) + '</div>';
+                html += '<div class="summary-stat-value">' + formatNumber(stats.avgMilesPerDay, 1) + '</div>';
                 html += '</div>';
                 html += '</div>';
                 
@@ -903,19 +912,19 @@
                 html += '<div class="summary-section-title">⛽ Fuel Consumption</div>';
                 html += '<div class="summary-stat">';
                 html += '<div class="summary-stat-label">Total Gallons Used (since 10/04/2024)</div>';
-                html += '<div class="summary-stat-value">' + formatNumber(stats.totalGallons) + '</div>';
+                html += '<div class="summary-stat-value">' + formatNumber(stats.totalGallons, 1) + '</div>';
                 html += '</div>';
                 html += '<div class="summary-stat">';
                 html += '<div class="summary-stat-label">Running Average MPG</div>';
-                html += '<div class="summary-stat-value">' + formatNumber(stats.runningAvgMPG) + '</div>';
+                html += '<div class="summary-stat-value">' + formatNumber(stats.runningAvgMPG, 1) + '</div>';
                 html += '</div>';
                 html += '<div class="summary-stat">';
                 html += '<div class="summary-stat-label">Lowest MPG per Tank</div>';
-                html += '<div class="summary-stat-value">' + formatNumber(stats.lowestMPG) + '</div>';
+                html += '<div class="summary-stat-value">' + formatNumber(stats.lowestMPG, 1) + '</div>';
                 html += '</div>';
                 html += '<div class="summary-stat">';
                 html += '<div class="summary-stat-label">Highest MPG per Tank</div>';
-                html += '<div class="summary-stat-value">' + formatNumber(stats.highestMPG) + '</div>';
+                html += '<div class="summary-stat-value">' + formatNumber(stats.highestMPG, 1) + '</div>';
                 html += '</div>';
                 html += '</div>';
                 
@@ -935,7 +944,7 @@
                 html += '</div>';
                 html += '<div class="summary-stat">';
                 html += '<div class="summary-stat-label">Total Lifetime Gas Cost</div>';
-                html += '<div class="summary-stat-value">$' + formatNumber(stats.totalLifetimeCost) + '</div>';
+                html += '<div class="summary-stat-value">$' + formatNumber(stats.totalLifetimeCost, 2) + '</div>';
                 html += '</div>';
                 html += '</div>';
                 
@@ -943,7 +952,7 @@
                 html += '<div class="summary-section-title">📅 Ownership</div>';
                 html += '<div class="summary-stat">';
                 html += '<div class="summary-stat-label">Total Days Owned (since 10/04/2024)</div>';
-                html += '<div class="summary-stat-value">' + formatNumber(stats.totalDaysOwned) + ' days</div>';
+                html += '<div class="summary-stat-value">' + formatNumber(stats.totalDaysOwned, 0) + ' days</div>';
                 html += '</div>';
                 html += '<div class="summary-stat">';
                 html += '<div class="summary-stat-label">Years Owned (since 10/04/2024)</div>';
@@ -960,7 +969,7 @@
             }
         }
         
-        function formatNumber(value) {
+        function formatNumber(value, decimals) {
             if (!value || value === 'N/A') return 'N/A';
             
             const str = String(value).trim();
@@ -968,6 +977,15 @@
             
             if (isNaN(num)) return str;
             
+            // If decimals is specified, use it
+            if (decimals !== undefined) {
+                return num.toLocaleString('en-US', { 
+                    minimumFractionDigits: decimals, 
+                    maximumFractionDigits: decimals 
+                });
+            }
+            
+            // Default formatting for values without specified decimals
             if (num >= 1000) {
                 return num.toLocaleString('en-US', { maximumFractionDigits: 2 });
             } else if (num >= 1) {
