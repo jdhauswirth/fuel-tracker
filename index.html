@@ -426,10 +426,10 @@
         
         <div id="appContent">
             <div class="tabs">
-                <button class="tab active" onclick="showTab('log')">📝 Log Fuel</button>
-                <button class="tab" onclick="showTab('history')">📊 History</button>
-                <button class="tab" onclick="showTab('summary')">📈 Summary</button>
-                <button class="tab" onclick="showTab('trends')">📈 Price Trends</button>
+                <button class="tab active" onclick="showTab('log', event)">📝 Log Fuel</button>
+                <button class="tab" onclick="showTab('history', event)">📊 History</button>
+                <button class="tab" onclick="showTab('summary', event)">📈 Summary</button>
+                <button class="tab" onclick="showTab('trends', event)">📈 Price Trends</button>
             </div>
             
             <div id="logTab" class="tab-content active">
@@ -611,7 +611,7 @@
         
         setTodayDate();
         
-        function showTab(tabName) {
+        function showTab(tabName, event) {
             console.log('=== showTab() called with tabName:', tabName, '===');
             console.log('accessToken exists?', !!accessToken);
             
@@ -623,23 +623,30 @@
             });
             
             document.getElementById(tabName + 'Tab').classList.add('active');
-            event.target.classList.add('active');
+            if (event && event.target) {
+                event.target.classList.add('active');
+            } else {
+                // Fallback: find the button by its onclick attribute
+                document.querySelectorAll('.tab').forEach(function(btn) {
+                    if (btn.getAttribute('onclick') && btn.getAttribute('onclick').includes("'" + tabName + "'")) {
+                        btn.classList.add('active');
+                    }
+                });
+            }
             
             // Auto-refresh data when switching to tabs
-            if (accessToken) {
-                console.log('accessToken exists, calling load function for tab:', tabName);
-                if (tabName === 'summary') {
-                    console.log('Calling loadSummary()...');
-                    loadSummary();
-                } else if (tabName === 'history') {
-                    loadHistory();
-                } else if (tabName === 'trends') {
-                    setTimeout(function() {
-                        loadPriceTrends();
-                    }, 100);
-                }
-            } else {
-                console.log('No accessToken, not calling load function');
+            // Always call loadSummary for summary tab (it will handle missing accessToken)
+            if (tabName === 'summary') {
+                console.log('Summary tab selected - calling loadSummary()...');
+                loadSummary();
+            } else if (tabName === 'history' && accessToken) {
+                loadHistory();
+            } else if (tabName === 'trends' && accessToken) {
+                setTimeout(function() {
+                    loadPriceTrends();
+                }, 100);
+            } else if (!accessToken && tabName !== 'summary') {
+                console.log('No accessToken, not calling load function for tab:', tabName);
             }
         }
         
@@ -938,10 +945,32 @@
         
         async function loadSummary() {
             console.log('=== loadSummary() FUNCTION CALLED ===');
+            console.log('accessToken exists?', !!accessToken);
+            console.log('gapiInited?', gapiInited);
+            console.log('gapi.client exists?', typeof gapi !== 'undefined' && typeof gapi.client !== 'undefined');
+            
+            if (!accessToken) {
+                console.log('WARNING: No accessToken - API call will fail');
+                showStatus('Please sign in to view summary', 'error');
+                return;
+            }
+            
+            if (!gapiInited || !gapi || !gapi.client) {
+                console.log('WARNING: gapi not initialized - API call will fail');
+                showStatus('Please wait for Google API to initialize', 'error');
+                return;
+            }
+            
             showStatus('Loading summary...', 'info');
             try {
                 const spreadsheetId = localStorage.getItem('fuelTracker_spreadsheetId');
                 const sheetName = localStorage.getItem('fuelTracker_sheetName');
+                
+                if (!spreadsheetId || !sheetName) {
+                    console.log('ERROR: Missing spreadsheetId or sheetName');
+                    showStatus('Please configure spreadsheet settings', 'error');
+                    return;
+                }
                 
                 console.log('Reading from sheet:', sheetName, 'range: T2:T20');
                 
