@@ -963,26 +963,66 @@
                 let t19Value = 'N/A';
                 let t20Value = 'N/A';
                 
-                if (values.length > 17 && values[17] && values[17][0] !== undefined && values[17][0] !== null) {
-                    const val = String(values[17][0]).trim();
-                    if (val !== '') {
-                        t19Value = val;
+                // More robust extraction - check if the array has the right length
+                if (values.length >= 19) {
+                    // We have at least 19 elements, so T19 should be at index 17
+                    if (values[17] !== undefined && values[17] !== null) {
+                        if (Array.isArray(values[17]) && values[17][0] !== undefined && values[17][0] !== null) {
+                            const val = String(values[17][0]).trim();
+                            if (val !== '' && val !== 'null' && val !== 'undefined') {
+                                t19Value = val;
+                            }
+                        } else if (!Array.isArray(values[17]) && values[17] !== undefined && values[17] !== null) {
+                            // In case it's not an array but a direct value
+                            const val = String(values[17]).trim();
+                            if (val !== '' && val !== 'null' && val !== 'undefined') {
+                                t19Value = val;
+                            }
+                        }
                     }
+                } else {
+                    console.error('ERROR: values array too short for T19. Length:', values.length, 'Expected: 19');
                 }
                 
-                if (values.length > 18 && values[18] && values[18][0] !== undefined && values[18][0] !== null) {
-                    const val = String(values[18][0]).trim();
-                    if (val !== '') {
-                        t20Value = val;
+                if (values.length >= 20) {
+                    // We have at least 20 elements, so T20 should be at index 18
+                    if (values[18] !== undefined && values[18] !== null) {
+                        if (Array.isArray(values[18]) && values[18][0] !== undefined && values[18][0] !== null) {
+                            const val = String(values[18][0]).trim();
+                            if (val !== '' && val !== 'null' && val !== 'undefined') {
+                                t20Value = val;
+                            }
+                        } else if (!Array.isArray(values[18]) && values[18] !== undefined && values[18] !== null) {
+                            // In case it's not an array but a direct value
+                            const val = String(values[18]).trim();
+                            if (val !== '' && val !== 'null' && val !== 'undefined') {
+                                t20Value = val;
+                            }
+                        }
                     }
+                } else {
+                    console.error('ERROR: values array too short for T20. Length:', values.length, 'Expected: 20');
                 }
                 
-                // Debug logging
+                // Debug logging for Summary Tab - T19 and T20
+                console.log('=== SUMMARY TAB DEBUG ===');
                 console.log('Values array length:', values.length);
-                console.log('T19 (index 17) raw:', values[17]);
+                console.log('All values array:', values);
+                if (values.length > 17) {
+                    console.log('T19 (index 17) raw array:', values[17]);
+                    console.log('T19 (index 17) value[0]:', values[17] ? values[17][0] : 'undefined');
+                } else {
+                    console.log('ERROR: values array too short! Expected at least 18 elements, got:', values.length);
+                }
+                if (values.length > 18) {
+                    console.log('T20 (index 18) raw array:', values[18]);
+                    console.log('T20 (index 18) value[0]:', values[18] ? values[18][0] : 'undefined');
+                } else {
+                    console.log('ERROR: values array too short! Expected at least 19 elements, got:', values.length);
+                }
                 console.log('T19 extracted value:', t19Value);
-                console.log('T20 (index 18) raw:', values[18]);
                 console.log('T20 extracted value:', t20Value);
+                console.log('=== END SUMMARY DEBUG ===');
                 
                 const stats = {
                     yearsManufactured: values[0] ? values[0][0] : 'N/A', // T2
@@ -1007,8 +1047,8 @@
                 };
                 
                 // Additional debug
-                console.log('stats.avgGasCostPerMile:', stats.avgGasCostPerMile);
-                console.log('stats.fuelTankCapacity:', stats.fuelTankCapacity);
+                console.log('Final stats.avgGasCostPerMile:', stats.avgGasCostPerMile);
+                console.log('Final stats.fuelTankCapacity:', stats.fuelTankCapacity);
                 
                 // Find dates for min and max prices by searching through data rows
                 let minPriceDate = '';
@@ -1166,6 +1206,7 @@
                 html += '<div class="summary-stat-label">My TOTAL "Lifetime" Gas Cost</div>';
                 html += '<div class="summary-stat-value">$' + formatNumber(stats.totalLifetimeCost, 2) + '</div>';
                 html += '</div>';
+                // Always add Average Gas Cost per Mile - even if value is N/A, show the label
                 html += '<div class="summary-stat">';
                 html += '<div class="summary-stat-label">Average Gas Cost per Mile</div>';
                 html += '<div class="summary-stat-value">$' + formatNumber(stats.avgGasCostPerMile, 2) + '</div>';
@@ -1173,11 +1214,64 @@
                 html += '</div>'; // End of Cost Statistics section
                 
                 // Debug: Log the final HTML to verify Average Gas Cost per Mile is included
-                console.log('Final HTML includes "Average Gas Cost per Mile":', html.includes('Average Gas Cost per Mile'));
-                console.log('stats.avgGasCostPerMile in HTML:', html.includes(String(stats.avgGasCostPerMile)));
+                console.log('=== HTML GENERATION DEBUG ===');
+                console.log('HTML includes "Average Gas Cost per Mile" label:', html.includes('Average Gas Cost per Mile'));
+                console.log('HTML includes avgGasCostPerMile value:', html.includes(String(stats.avgGasCostPerMile)));
+                console.log('HTML includes fuelTankCapacity value:', html.includes(String(stats.fuelTankCapacity)));
+                console.log('stats.avgGasCostPerMile value being used:', stats.avgGasCostPerMile);
+                console.log('stats.fuelTankCapacity value being used:', stats.fuelTankCapacity);
                 
-                summaryContent.innerHTML = html;
-                showStatus('Summary loaded successfully!', 'success');
+                // Extract the last part of HTML to verify it's correct
+                const lastPart = html.substring(html.lastIndexOf('My TOTAL'));
+                console.log('Last part of HTML (should include Average Gas Cost per Mile):', lastPart);
+                console.log('=== END HTML DEBUG ===');
+                
+                try {
+                    if (!summaryContent) {
+                        console.error('ERROR: summaryContent element not found!');
+                        showStatus('Error: Summary content element not found', 'error');
+                        return;
+                    }
+                    
+                    summaryContent.innerHTML = html;
+                    console.log('HTML successfully set to summaryContent');
+                    
+                    // Verify it was set correctly - check for Average Gas Cost per Mile
+                    const allLabels = Array.from(summaryContent.querySelectorAll('.summary-stat-label'));
+                    const avgGasCostLabel = allLabels.find(el => el.textContent.includes('Average Gas Cost per Mile'));
+                    
+                    if (avgGasCostLabel) {
+                        console.log('✓ Verified: Average Gas Cost per Mile label found in DOM');
+                        console.log('✓ Label text:', avgGasCostLabel.textContent);
+                        const parentStat = avgGasCostLabel.closest('.summary-stat');
+                        if (parentStat) {
+                            const valueElement = parentStat.querySelector('.summary-stat-value');
+                            console.log('✓ Value element text:', valueElement ? valueElement.textContent : 'NOT FOUND');
+                        }
+                    } else {
+                        console.log('✗ ERROR: Average Gas Cost per Mile label NOT found in DOM after setting HTML');
+                        console.log('Available labels:', allLabels.map(el => el.textContent));
+                    }
+                    
+                    // Also verify Fuel Tank Capacity
+                    const fuelTankLabel = allLabels.find(el => el.textContent.includes('Fuel Tank Capacity'));
+                    if (fuelTankLabel) {
+                        console.log('✓ Fuel Tank Capacity label found');
+                        const parentStat = fuelTankLabel.closest('.summary-stat');
+                        if (parentStat) {
+                            const valueElement = parentStat.querySelector('.summary-stat-value');
+                            console.log('✓ Fuel Tank Capacity value:', valueElement ? valueElement.textContent : 'NOT FOUND');
+                        }
+                    } else {
+                        console.log('✗ ERROR: Fuel Tank Capacity label NOT found');
+                    }
+                    
+                    showStatus('Summary loaded successfully!', 'success');
+                } catch (err) {
+                    console.error('ERROR setting summaryContent.innerHTML:', err);
+                    console.error('Error stack:', err.stack);
+                    showStatus('Error displaying summary: ' + err.message, 'error');
+                }
             } catch (err) {
                 console.error('Error loading summary:', err);
                 showStatus('Error loading summary: ' + err.message, 'error');
