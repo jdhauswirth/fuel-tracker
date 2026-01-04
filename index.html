@@ -612,6 +612,9 @@
         setTodayDate();
         
         function showTab(tabName) {
+            console.log('=== showTab() called with tabName:', tabName, '===');
+            console.log('accessToken exists?', !!accessToken);
+            
             document.querySelectorAll('.tab-content').forEach(function(tab) { 
                 tab.classList.remove('active'); 
             });
@@ -624,7 +627,9 @@
             
             // Auto-refresh data when switching to tabs
             if (accessToken) {
+                console.log('accessToken exists, calling load function for tab:', tabName);
                 if (tabName === 'summary') {
+                    console.log('Calling loadSummary()...');
                     loadSummary();
                 } else if (tabName === 'history') {
                     loadHistory();
@@ -633,6 +638,8 @@
                         loadPriceTrends();
                     }, 100);
                 }
+            } else {
+                console.log('No accessToken, not calling load function');
             }
         }
         
@@ -930,10 +937,13 @@
         }
         
         async function loadSummary() {
+            console.log('=== loadSummary() FUNCTION CALLED ===');
             showStatus('Loading summary...', 'info');
             try {
                 const spreadsheetId = localStorage.getItem('fuelTracker_spreadsheetId');
                 const sheetName = localStorage.getItem('fuelTracker_sheetName');
+                
+                console.log('Reading from sheet:', sheetName, 'range: T2:T20');
                 
                 // Read from T2:T20 (original structure)
                 const response = await gapi.client.sheets.spreadsheets.values.get({
@@ -941,88 +951,120 @@
                     range: sheetName + '!T2:T20',
                 });
                 
+                console.log('API Response received:', response);
+                console.log('response.result:', response.result);
+                
                 const values = response.result.values;
                 const summaryContent = document.getElementById('summaryContent');
                 
+                // IMMEDIATE DEBUG - Log what we received from Google Sheets
+                console.log('=== SUMMARY TAB DEBUG - START ===');
+                console.log('Response received from Google Sheets API');
+                console.log('values is:', values);
+                console.log('values type:', typeof values);
+                console.log('values is array:', Array.isArray(values));
+                console.log('values length:', values ? values.length : 'null/undefined');
+                
+                if (values && values.length > 0) {
+                    console.log('First value:', values[0]);
+                    console.log('Last value index:', values.length - 1);
+                    console.log('Last value:', values[values.length - 1]);
+                }
+                
                 // Map values: T2:T20 means values[0] = T2, values[1] = T3, ..., values[17] = T19, values[18] = T20
-                // Ensure we have enough values
+                // T2:T20 gives us 19 rows (T2 through T20 inclusive)
+                // So we need at least 19 elements (indices 0-18)
                 if (!values || values.length < 19) {
-                    summaryContent.innerHTML = '<p style="text-align: center; color: #999;">Summary data not available. Expected 19 values but got ' + (values ? values.length : 0) + '. Make sure cells T2-T20 contain data.</p>';
+                    const errorMsg = 'Summary data not available. Expected 19 values (T2-T20) but got ' + (values ? values.length : 0) + '. Make sure cells T2-T20 contain data.';
+                    console.error('ERROR:', errorMsg);
+                    console.log('Values array contents:', values);
+                    summaryContent.innerHTML = '<p style="text-align: center; color: #999;">' + errorMsg + '</p>';
                     showStatus('Summary data not found', 'error');
                     return;
                 }
                 
-                // Debug: Log the values array structure
-                console.log('Values array length:', values.length);
-                console.log('First few values:', values.slice(0, 3));
-                console.log('Last few values:', values.slice(16));
-                
                 // Extract T19 and T20 values explicitly
                 // T2:T20 means: values[0]=T2, values[1]=T3, ..., values[17]=T19, values[18]=T20
-                // Handle case where array might be shorter if some cells are empty
                 let t19Value = 'N/A';
                 let t20Value = 'N/A';
                 
-                // More robust extraction - check if the array has the right length
-                if (values.length >= 19) {
-                    // We have at least 19 elements, so T19 should be at index 17
-                    if (values[17] !== undefined && values[17] !== null) {
-                        if (Array.isArray(values[17]) && values[17][0] !== undefined && values[17][0] !== null) {
+                console.log('=== EXTRACTING T19 AND T20 ===');
+                console.log('Checking for T19 at index 17...');
+                console.log('values[17] exists?', values[17] !== undefined);
+                console.log('values[17] value:', values[17]);
+                console.log('values[17] type:', typeof values[17]);
+                console.log('values[17] is array?', Array.isArray(values[17]));
+                
+                // Extract T19 (index 17)
+                if (values[17] !== undefined && values[17] !== null) {
+                    if (Array.isArray(values[17])) {
+                        console.log('values[17] is an array with length:', values[17].length);
+                        console.log('values[17][0]:', values[17][0]);
+                        if (values[17][0] !== undefined && values[17][0] !== null) {
                             const val = String(values[17][0]).trim();
+                            console.log('T19 raw value after String().trim():', val);
                             if (val !== '' && val !== 'null' && val !== 'undefined') {
                                 t19Value = val;
+                                console.log('✓ T19 value extracted successfully:', t19Value);
+                            } else {
+                                console.log('✗ T19 value is empty or invalid:', val);
                             }
-                        } else if (!Array.isArray(values[17]) && values[17] !== undefined && values[17] !== null) {
-                            // In case it's not an array but a direct value
-                            const val = String(values[17]).trim();
-                            if (val !== '' && val !== 'null' && val !== 'undefined') {
-                                t19Value = val;
-                            }
+                        } else {
+                            console.log('✗ values[17][0] is undefined or null');
+                        }
+                    } else {
+                        // Not an array, treat as direct value
+                        const val = String(values[17]).trim();
+                        console.log('values[17] is not an array, direct value:', val);
+                        if (val !== '' && val !== 'null' && val !== 'undefined') {
+                            t19Value = val;
+                            console.log('✓ T19 value extracted (direct):', t19Value);
                         }
                     }
                 } else {
-                    console.error('ERROR: values array too short for T19. Length:', values.length, 'Expected: 19');
+                    console.error('✗ ERROR: values[17] is undefined or null');
                 }
                 
-                if (values.length >= 20) {
-                    // We have at least 20 elements, so T20 should be at index 18
-                    if (values[18] !== undefined && values[18] !== null) {
-                        if (Array.isArray(values[18]) && values[18][0] !== undefined && values[18][0] !== null) {
+                console.log('Checking for T20 at index 18...');
+                console.log('values[18] exists?', values[18] !== undefined);
+                console.log('values[18] value:', values[18]);
+                console.log('values[18] type:', typeof values[18]);
+                console.log('values[18] is array?', Array.isArray(values[18]));
+                
+                // Extract T20 (index 18)
+                if (values[18] !== undefined && values[18] !== null) {
+                    if (Array.isArray(values[18])) {
+                        console.log('values[18] is an array with length:', values[18].length);
+                        console.log('values[18][0]:', values[18][0]);
+                        if (values[18][0] !== undefined && values[18][0] !== null) {
                             const val = String(values[18][0]).trim();
+                            console.log('T20 raw value after String().trim():', val);
                             if (val !== '' && val !== 'null' && val !== 'undefined') {
                                 t20Value = val;
+                                console.log('✓ T20 value extracted successfully:', t20Value);
+                            } else {
+                                console.log('✗ T20 value is empty or invalid:', val);
                             }
-                        } else if (!Array.isArray(values[18]) && values[18] !== undefined && values[18] !== null) {
-                            // In case it's not an array but a direct value
-                            const val = String(values[18]).trim();
-                            if (val !== '' && val !== 'null' && val !== 'undefined') {
-                                t20Value = val;
-                            }
+                        } else {
+                            console.log('✗ values[18][0] is undefined or null');
+                        }
+                    } else {
+                        // Not an array, treat as direct value
+                        const val = String(values[18]).trim();
+                        console.log('values[18] is not an array, direct value:', val);
+                        if (val !== '' && val !== 'null' && val !== 'undefined') {
+                            t20Value = val;
+                            console.log('✓ T20 value extracted (direct):', t20Value);
                         }
                     }
                 } else {
-                    console.error('ERROR: values array too short for T20. Length:', values.length, 'Expected: 20');
+                    console.error('✗ ERROR: values[18] is undefined or null');
                 }
                 
-                // Debug logging for Summary Tab - T19 and T20
-                console.log('=== SUMMARY TAB DEBUG ===');
-                console.log('Values array length:', values.length);
-                console.log('All values array:', values);
-                if (values.length > 17) {
-                    console.log('T19 (index 17) raw array:', values[17]);
-                    console.log('T19 (index 17) value[0]:', values[17] ? values[17][0] : 'undefined');
-                } else {
-                    console.log('ERROR: values array too short! Expected at least 18 elements, got:', values.length);
-                }
-                if (values.length > 18) {
-                    console.log('T20 (index 18) raw array:', values[18]);
-                    console.log('T20 (index 18) value[0]:', values[18] ? values[18][0] : 'undefined');
-                } else {
-                    console.log('ERROR: values array too short! Expected at least 19 elements, got:', values.length);
-                }
-                console.log('T19 extracted value:', t19Value);
-                console.log('T20 extracted value:', t20Value);
-                console.log('=== END SUMMARY DEBUG ===');
+                console.log('=== EXTRACTION RESULTS ===');
+                console.log('t19Value (T19 - Average Gas Cost per Mile):', t19Value);
+                console.log('t20Value (T20 - Fuel Tank Capacity):', t20Value);
+                console.log('=== END EXTRACTION DEBUG ===');
                 
                 const stats = {
                     yearsManufactured: values[0] ? values[0][0] : 'N/A', // T2
@@ -1046,9 +1088,14 @@
                     fuelTankCapacity: t20Value // T20 - Fuel Tank Capacity
                 };
                 
-                // Additional debug
-                console.log('Final stats.avgGasCostPerMile:', stats.avgGasCostPerMile);
-                console.log('Final stats.fuelTankCapacity:', stats.fuelTankCapacity);
+                // CRITICAL DEBUG - Log stats object immediately after creation
+                console.log('=== STATS OBJECT CREATED ===');
+                console.log('stats object:', stats);
+                console.log('stats.avgGasCostPerMile (T19):', stats.avgGasCostPerMile, 'Type:', typeof stats.avgGasCostPerMile);
+                console.log('stats.fuelTankCapacity (T20):', stats.fuelTankCapacity, 'Type:', typeof stats.fuelTankCapacity);
+                console.log('t19Value variable:', t19Value, 'Type:', typeof t19Value);
+                console.log('t20Value variable:', t20Value, 'Type:', typeof t20Value);
+                console.log('=== END STATS DEBUG ===');
                 
                 // Find dates for min and max prices by searching through data rows
                 let minPriceDate = '';
@@ -1174,10 +1221,20 @@
                 html += '<div class="summary-stat-label">Highest MPG per Tank Fillup</div>';
                 html += '<div class="summary-stat-value">' + formatNumber(stats.highestMPG, 1) + '</div>';
                 html += '</div>';
+                // DEBUG before adding Fuel Tank Capacity
+                console.log('=== BEFORE ADDING FUEL TANK CAPACITY ===');
+                console.log('stats.fuelTankCapacity value:', stats.fuelTankCapacity);
+                console.log('formatNumber(stats.fuelTankCapacity, 1):', formatNumber(stats.fuelTankCapacity, 1));
+                
                 html += '<div class="summary-stat">';
                 html += '<div class="summary-stat-label">Fuel Tank Capacity (US gallons)</div>';
-                html += '<div class="summary-stat-value">' + formatNumber(stats.fuelTankCapacity, 1) + '</div>';
+                const fuelTankFormatted = formatNumber(stats.fuelTankCapacity, 1);
+                console.log('fuelTankFormatted:', fuelTankFormatted);
+                html += '<div class="summary-stat-value">' + fuelTankFormatted + '</div>';
                 html += '</div>';
+                
+                console.log('=== AFTER ADDING FUEL TANK CAPACITY ===');
+                console.log('HTML now includes "Fuel Tank Capacity":', html.includes('Fuel Tank Capacity'));
                 html += '</div>';
                 
                 html += '<div class="summary-section">';
@@ -1206,12 +1263,23 @@
                 html += '<div class="summary-stat-label">My TOTAL "Lifetime" Gas Cost</div>';
                 html += '<div class="summary-stat-value">$' + formatNumber(stats.totalLifetimeCost, 2) + '</div>';
                 html += '</div>';
+                
+                // DEBUG before adding Average Gas Cost per Mile
+                console.log('=== BEFORE ADDING AVERAGE GAS COST PER MILE ===');
+                console.log('stats.avgGasCostPerMile value:', stats.avgGasCostPerMile);
+                console.log('formatNumber(stats.avgGasCostPerMile, 2):', formatNumber(stats.avgGasCostPerMile, 2));
+                
                 // Always add Average Gas Cost per Mile - even if value is N/A, show the label
                 html += '<div class="summary-stat">';
                 html += '<div class="summary-stat-label">Average Gas Cost per Mile</div>';
-                html += '<div class="summary-stat-value">$' + formatNumber(stats.avgGasCostPerMile, 2) + '</div>';
+                const avgGasCostFormatted = formatNumber(stats.avgGasCostPerMile, 2);
+                console.log('avgGasCostFormatted:', avgGasCostFormatted);
+                html += '<div class="summary-stat-value">$' + avgGasCostFormatted + '</div>';
                 html += '</div>';
                 html += '</div>'; // End of Cost Statistics section
+                
+                console.log('=== AFTER ADDING AVERAGE GAS COST PER MILE ===');
+                console.log('HTML now includes "Average Gas Cost per Mile":', html.includes('Average Gas Cost per Mile'));
                 
                 // Debug: Log the final HTML to verify Average Gas Cost per Mile is included
                 console.log('=== HTML GENERATION DEBUG ===');
@@ -1273,9 +1341,20 @@
                     showStatus('Error displaying summary: ' + err.message, 'error');
                 }
             } catch (err) {
-                console.error('Error loading summary:', err);
+                console.error('=== ERROR IN loadSummary() ===');
+                console.error('Error object:', err);
+                console.error('Error message:', err.message);
+                console.error('Error stack:', err.stack);
+                console.error('Error name:', err.name);
+                if (err.result) {
+                    console.error('Error result:', err.result);
+                }
+                console.error('=== END ERROR ===');
                 showStatus('Error loading summary: ' + err.message, 'error');
-                document.getElementById('summaryContent').innerHTML = '<p style="text-align: center; color: #c62828;">Error loading summary data. Please try again.</p>';
+                const summaryContent = document.getElementById('summaryContent');
+                if (summaryContent) {
+                    summaryContent.innerHTML = '<p style="text-align: center; color: #c62828;">Error loading summary data: ' + err.message + '. Check console for details.</p>';
+                }
             }
         }
         
