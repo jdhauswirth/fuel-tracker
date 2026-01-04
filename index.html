@@ -950,6 +950,18 @@
                     return;
                 }
                 
+                // Map values: T2:T20 means values[0] = T2, values[1] = T3, ..., values[17] = T19, values[18] = T20
+                // Ensure we have enough values
+                if (!values || values.length < 19) {
+                    summaryContent.innerHTML = '<p style="text-align: center; color: #999;">Summary data not available. Expected 19 values but got ' + (values ? values.length : 0) + '. Make sure cells T2-T20 contain data.</p>';
+                    showStatus('Summary data not found', 'error');
+                    return;
+                }
+                
+                // Extract T19 and T20 values explicitly
+                const t19Value = (values[17] && values[17][0] !== undefined && values[17][0] !== null && String(values[17][0]).trim() !== '') ? values[17][0] : 'N/A';
+                const t20Value = (values[18] && values[18][0] !== undefined && values[18][0] !== null && String(values[18][0]).trim() !== '') ? values[18][0] : 'N/A';
+                
                 const stats = {
                     yearsManufactured: values[0] ? values[0][0] : 'N/A', // T2
                     yearsOwned: values[1] ? values[1][0] : 'N/A', // T3
@@ -968,8 +980,8 @@
                     lowestPricePerGal: values[14] ? values[14][0] : 'N/A', // T16
                     highestPricePerGal: values[15] ? values[15][0] : 'N/A', // T17
                     totalLifetimeCost: values[16] ? values[16][0] : 'N/A', // T18
-                    avgGasCostPerMile: values[17] ? values[17][0] : 'N/A', // T19
-                    fuelTankCapacity: values[18] ? values[18][0] : 'N/A' // T20
+                    avgGasCostPerMile: t19Value, // T19 - Average Gas Cost per Mile
+                    fuelTankCapacity: t20Value // T20 - Fuel Tank Capacity
                 };
                 
                 // Find dates for min and max prices by searching through data rows
@@ -1132,7 +1144,7 @@
                 html += '<div class="summary-stat-label">Average Gas Cost per Mile</div>';
                 html += '<div class="summary-stat-value">$' + formatNumber(stats.avgGasCostPerMile, 2) + '</div>';
                 html += '</div>';
-                html += '</div>';
+                html += '</div>'; // End of Cost Statistics section
                 
                 summaryContent.innerHTML = html;
                 showStatus('Summary loaded successfully!', 'success');
