@@ -944,12 +944,6 @@
                 const values = response.result.values;
                 const summaryContent = document.getElementById('summaryContent');
                 
-                if (!values || values.length < 19) {
-                    summaryContent.innerHTML = '<p style="text-align: center; color: #999;">Summary data not available. Make sure cells T2-T20 contain data.</p>';
-                    showStatus('Summary data not found', 'error');
-                    return;
-                }
-                
                 // Map values: T2:T20 means values[0] = T2, values[1] = T3, ..., values[17] = T19, values[18] = T20
                 // Ensure we have enough values
                 if (!values || values.length < 19) {
@@ -958,9 +952,37 @@
                     return;
                 }
                 
+                // Debug: Log the values array structure
+                console.log('Values array length:', values.length);
+                console.log('First few values:', values.slice(0, 3));
+                console.log('Last few values:', values.slice(16));
+                
                 // Extract T19 and T20 values explicitly
-                const t19Value = (values[17] && values[17][0] !== undefined && values[17][0] !== null && String(values[17][0]).trim() !== '') ? values[17][0] : 'N/A';
-                const t20Value = (values[18] && values[18][0] !== undefined && values[18][0] !== null && String(values[18][0]).trim() !== '') ? values[18][0] : 'N/A';
+                // T2:T20 means: values[0]=T2, values[1]=T3, ..., values[17]=T19, values[18]=T20
+                // Handle case where array might be shorter if some cells are empty
+                let t19Value = 'N/A';
+                let t20Value = 'N/A';
+                
+                if (values.length > 17 && values[17] && values[17][0] !== undefined && values[17][0] !== null) {
+                    const val = String(values[17][0]).trim();
+                    if (val !== '') {
+                        t19Value = val;
+                    }
+                }
+                
+                if (values.length > 18 && values[18] && values[18][0] !== undefined && values[18][0] !== null) {
+                    const val = String(values[18][0]).trim();
+                    if (val !== '') {
+                        t20Value = val;
+                    }
+                }
+                
+                // Debug logging
+                console.log('Values array length:', values.length);
+                console.log('T19 (index 17) raw:', values[17]);
+                console.log('T19 extracted value:', t19Value);
+                console.log('T20 (index 18) raw:', values[18]);
+                console.log('T20 extracted value:', t20Value);
                 
                 const stats = {
                     yearsManufactured: values[0] ? values[0][0] : 'N/A', // T2
@@ -983,6 +1005,10 @@
                     avgGasCostPerMile: t19Value, // T19 - Average Gas Cost per Mile
                     fuelTankCapacity: t20Value // T20 - Fuel Tank Capacity
                 };
+                
+                // Additional debug
+                console.log('stats.avgGasCostPerMile:', stats.avgGasCostPerMile);
+                console.log('stats.fuelTankCapacity:', stats.fuelTankCapacity);
                 
                 // Find dates for min and max prices by searching through data rows
                 let minPriceDate = '';
@@ -1054,11 +1080,11 @@
                 html += '<div class="summary-section-title">📊 Overall Ownership Statistics</div>';
                 html += '<div class="summary-stat">';
                 html += '<div class="summary-stat-label">Years 2018 Subaru Outback Was Manufactured (09/01/2017)</div>';
-                html += '<div class="summary-stat-value">' + formatNumber(stats.yearsManufactured) + ' years</div>';
+                html += '<div class="summary-stat-value">' + formatNumber(stats.yearsManufactured, 1) + ' years</div>';
                 html += '</div>';
                 html += '<div class="summary-stat">';
                 html += '<div class="summary-stat-label">Years Since 2018 Subaru Outback Was Purchased Used (10/04/2024)</div>';
-                html += '<div class="summary-stat-value">' + formatNumber(stats.yearsOwned) + ' years</div>';
+                html += '<div class="summary-stat-value">' + formatNumber(stats.yearsOwned, 1) + ' years</div>';
                 html += '</div>';
                 html += '<div class="summary-stat">';
                 html += '<div class="summary-stat-label">Total # Days Subaru Outback Purchased Used Since 10/04/2024</div>';
@@ -1145,6 +1171,10 @@
                 html += '<div class="summary-stat-value">$' + formatNumber(stats.avgGasCostPerMile, 2) + '</div>';
                 html += '</div>';
                 html += '</div>'; // End of Cost Statistics section
+                
+                // Debug: Log the final HTML to verify Average Gas Cost per Mile is included
+                console.log('Final HTML includes "Average Gas Cost per Mile":', html.includes('Average Gas Cost per Mile'));
+                console.log('stats.avgGasCostPerMile in HTML:', html.includes(String(stats.avgGasCostPerMile)));
                 
                 summaryContent.innerHTML = html;
                 showStatus('Summary loaded successfully!', 'success');
