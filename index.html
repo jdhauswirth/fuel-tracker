@@ -9,6 +9,10 @@
     <meta name="mobile-web-app-capable" content="yes">
     <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' fill='%232E7D32'/><text x='50' y='65' font-size='50' text-anchor='middle' fill='white'>⛽</text></svg>">
     <link rel="manifest" href="data:application/json;charset=utf-8,%7B%22name%22%3A%22Fuel%20Tracker%22%2C%22short_name%22%3A%22Fuel%22%2C%22display%22%3A%22standalone%22%2C%22background_color%22%3A%22%232E7D32%22%2C%22theme_color%22%3A%22%232E7D32%22%7D">
+    
+    <!-- Chart.js Library -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    
     <title>Fuel Tracker</title>
     <style>
         * {
@@ -363,6 +367,27 @@
             padding-bottom: 8px;
             border-bottom: 2px solid #e0e0e0;
         }
+        
+        .chart-container {
+            position: relative;
+            height: 400px;
+            margin-bottom: 20px;
+        }
+        
+        #priceTrendChart {
+            max-width: 100%;
+            height: 400px !important;
+        }
+        
+        @media (max-width: 600px) {
+            .chart-container {
+                height: 450px;
+            }
+            
+            #priceTrendChart {
+                height: 450px !important;
+            }
+        }
     </style>
 </head>
 <body>
@@ -404,6 +429,7 @@
                 <button class="tab active" onclick="showTab('log')">📝 Log Fuel</button>
                 <button class="tab" onclick="showTab('history')">📊 History</button>
                 <button class="tab" onclick="showTab('summary')">📈 Summary</button>
+                <button class="tab" onclick="showTab('trends')">📈 Price Trends</button>
             </div>
             
             <div id="logTab" class="tab-content active">
@@ -507,6 +533,41 @@
                     <p style="text-align: center; color: #999;">Click "Refresh Summary" to load statistics</p>
                 </div>
             </div>
+            
+            <div id="trendsTab" class="tab-content">
+                <div style="margin-bottom: 20px;">
+                    <button onclick="loadPriceTrends()">🔄 Load Price Trends</button>
+                </div>
+                <div style="margin-bottom: 15px; padding: 15px; background: #f5f5f5; border-radius: 8px;">
+                    <div style="margin-bottom: 10px; font-weight: 600; color: #333;">Date Range Filter</div>
+                    <div style="display: flex; flex-direction: column; gap: 10px;">
+                        <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                            <label for="trendStartDate" style="min-width: 80px; font-size: 14px;">Start Date:</label>
+                            <input type="date" id="trendStartDate" style="flex: 1; min-width: 150px; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                            <label for="trendEndDate" style="min-width: 80px; font-size: 14px;">End Date:</label>
+                            <input type="date" id="trendEndDate" style="flex: 1; min-width: 150px; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                        </div>
+                        <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                            <button onclick="applyDateFilter()" style="flex: 1; padding: 10px; background: linear-gradient(135deg, #2E7D32 0%, #1B5E20 100%); color: white; border: none; border-radius: 6px; font-weight: 600; cursor: pointer;">Apply Filter</button>
+                            <button onclick="resetDateFilter()" style="flex: 1; padding: 10px; background: #666; color: white; border: none; border-radius: 6px; font-weight: 600; cursor: pointer;">Show All Time</button>
+                        </div>
+                    </div>
+                </div>
+                <div style="margin-bottom: 15px; padding: 10px; background: #f5f5f5; border-radius: 8px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                    <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 14px;">
+                        <input type="checkbox" id="showTrendline" checked onchange="toggleTrendline()" style="width: 18px; height: 18px; cursor: pointer;">
+                        <span>Show Trendline (Red)</span>
+                    </label>
+                </div>
+                <div class="chart-container">
+                    <canvas id="priceTrendChart"></canvas>
+                </div>
+                <div id="trendsInfo" style="text-align: center; color: #999; font-size: 14px;">
+                    Click "Load Price Trends" to display the chart
+                </div>
+            </div>
         </div>
     </div>
 
@@ -520,11 +581,25 @@
         let gapiInited = false;
         let gisInited = false;
         let driveFolder = null;
+        let priceTrendChart = null;
+        let allPriceData = [];
+        let currentChartData = [];
         
         const DISCOVERY_DOC = 'https://sheets.googleapis.com/$discovery/rest?version=v4';
         const SCOPES = 'https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/drive.file';
         
         const isStandalone = window.navigator.standalone || window.matchMedia('(display-mode: standalone)').matches;
+        
+        // Column mapping for original structure:
+        // B (0): Date
+        // C (1): Odometer
+        // D (2): Miles/Fill
+        // E (3): Fuel Type
+        // F (4): Gallons
+        // G (5): MPG
+        // H (6): $/Gal
+        // I (7): Location
+        // P (14): Receipt Image
         
         function setTodayDate() {
             const today = new Date();
@@ -553,6 +628,10 @@
                     loadSummary();
                 } else if (tabName === 'history') {
                     loadHistory();
+                } else if (tabName === 'trends') {
+                    setTimeout(function() {
+                        loadPriceTrends();
+                    }, 100);
                 }
             }
         }
@@ -716,6 +795,7 @@
                             milesFillValues.push(parseFloat(String(milesFillValue).replace(/,/g, '')));
                         }
                         
+                        // Column H (index 6) is $/Gal in original structure
                         let priceValue = dataRows[i][6];
                         console.log('  Column H (index 6) raw value:', priceValue, 'Type:', typeof priceValue);
                         
@@ -855,51 +935,137 @@
                 const spreadsheetId = localStorage.getItem('fuelTracker_spreadsheetId');
                 const sheetName = localStorage.getItem('fuelTracker_sheetName');
                 
+                // Read from T2:T20 (original structure)
                 const response = await gapi.client.sheets.spreadsheets.values.get({
                     spreadsheetId: spreadsheetId,
-                    range: sheetName + '!T2:T15',
+                    range: sheetName + '!T2:T20',
                 });
                 
                 const values = response.result.values;
                 const summaryContent = document.getElementById('summaryContent');
                 
-                if (!values || values.length < 14) {
-                    summaryContent.innerHTML = '<p style="text-align: center; color: #999;">Summary data not available. Make sure cells T2-T15 contain data.</p>';
+                if (!values || values.length < 19) {
+                    summaryContent.innerHTML = '<p style="text-align: center; color: #999;">Summary data not available. Make sure cells T2-T20 contain data.</p>';
                     showStatus('Summary data not found', 'error');
                     return;
                 }
                 
                 const stats = {
-                    milesDriven: values[0] ? values[0][0] : 'N/A',
-                    fuelUps: values[1] ? values[1][0] : 'N/A',
-                    avgMilesBetweenFill: values[2] ? values[2][0] : 'N/A',
-                    totalGallons: values[3] ? values[3][0] : 'N/A',
-                    runningAvgMPG: values[4] ? values[4][0] : 'N/A',
-                    lowestMPG: values[5] ? values[5][0] : 'N/A',
-                    highestMPG: values[6] ? values[6][0] : 'N/A',
-                    avgCostPerGal: values[7] ? values[7][0] : 'N/A',
-                    lowestPricePerGal: values[8] ? values[8][0] : 'N/A',
-                    highestPricePerGal: values[9] ? values[9][0] : 'N/A',
-                    avgMilesPerDay: values[10] ? values[10][0] : 'N/A',
-                    totalDaysOwned: values[11] ? values[11][0] : 'N/A',
-                    yearsOwned: values[12] ? values[12][0] : 'N/A',
-                    totalLifetimeCost: values[13] ? values[13][0] : 'N/A'
+                    yearsManufactured: values[0] ? values[0][0] : 'N/A', // T2
+                    yearsOwned: values[1] ? values[1][0] : 'N/A', // T3
+                    totalDaysOwned: values[2] ? values[2][0] : 'N/A', // T4
+                    currentTotalMiles: values[3] ? values[3][0] : 'N/A', // T5
+                    milesDriven: values[4] ? values[4][0] : 'N/A', // T6
+                    totalGallons: values[5] ? values[5][0] : 'N/A', // T7
+                    num55GalDrums: values[6] ? values[6][0] : 'N/A', // T8
+                    fuelUps: values[7] ? values[7][0] : 'N/A', // T9
+                    avgMilesBetweenFill: values[8] ? values[8][0] : 'N/A', // T10
+                    runningAvgMPG: values[9] ? values[9][0] : 'N/A', // T11
+                    lowestMPG: values[10] ? values[10][0] : 'N/A', // T12
+                    highestMPG: values[11] ? values[11][0] : 'N/A', // T13
+                    avgMilesPerDay: values[12] ? values[12][0] : 'N/A', // T14
+                    avgCostPerGal: values[13] ? values[13][0] : 'N/A', // T15
+                    lowestPricePerGal: values[14] ? values[14][0] : 'N/A', // T16
+                    highestPricePerGal: values[15] ? values[15][0] : 'N/A', // T17
+                    totalLifetimeCost: values[16] ? values[16][0] : 'N/A', // T18
+                    avgGasCostPerMile: values[17] ? values[17][0] : 'N/A', // T19
+                    fuelTankCapacity: values[18] ? values[18][0] : 'N/A' // T20
                 };
+                
+                // Find dates for min and max prices by searching through data rows
+                let minPriceDate = '';
+                let maxPriceDate = '';
+                
+                try {
+                    // Read columns B (Date) and H ($/Gal) to find matching prices
+                    const dataResponse = await gapi.client.sheets.spreadsheets.values.get({
+                        spreadsheetId: spreadsheetId,
+                        range: sheetName + '!B:H',
+                    });
+                    
+                    const dataValues = dataResponse.result.values;
+                    
+                    if (dataValues && dataValues.length > 1) {
+                        const minPriceValue = parseFloat(String(stats.lowestPricePerGal).replace(/[\$,\s]/g, ''));
+                        const maxPriceValue = parseFloat(String(stats.highestPricePerGal).replace(/[\$,\s]/g, ''));
+                        
+                        if (!isNaN(minPriceValue)) {
+                            // Search for first occurrence of min price in Column H (index 6)
+                            for (let i = 1; i < dataValues.length; i++) {
+                                const row = dataValues[i];
+                                if (row && row.length > 6 && row[6]) {
+                                    const rowPriceStr = String(row[6]).replace(/[\$,\s]/g, '');
+                                    const rowPrice = parseFloat(rowPriceStr);
+                                    if (!isNaN(rowPrice)) {
+                                        const priceDiff = Math.abs(rowPrice - minPriceValue);
+                                        if (priceDiff < 0.01) {
+                                            if (row[0]) {
+                                                minPriceDate = String(row[0]).trim();
+                                            }
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        
+                        if (!isNaN(maxPriceValue)) {
+                            // Search for first occurrence of max price in Column H (index 6)
+                            for (let i = 1; i < dataValues.length; i++) {
+                                const row = dataValues[i];
+                                if (row && row.length > 6 && row[6]) {
+                                    const rowPriceStr = String(row[6]).replace(/[\$,\s]/g, '');
+                                    const rowPrice = parseFloat(rowPriceStr);
+                                    if (!isNaN(rowPrice)) {
+                                        const priceDiff = Math.abs(rowPrice - maxPriceValue);
+                                        if (priceDiff < 0.01) {
+                                            if (row[0]) {
+                                                maxPriceDate = String(row[0]).trim();
+                                            }
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } catch (err) {
+                    console.error('Error finding price dates:', err);
+                }
+                
+                stats.minPriceDate = minPriceDate;
+                stats.maxPriceDate = maxPriceDate;
                 
                 let html = '';
                 
                 html += '<div class="summary-section">';
-                html += '<div class="summary-section-title">📊 Overall Statistics</div>';
+                html += '<div class="summary-section-title">📊 Overall Ownership Statistics</div>';
+                html += '<div class="summary-stat">';
+                html += '<div class="summary-stat-label">Years 2018 Subaru Outback Was Manufactured (09/01/2017)</div>';
+                html += '<div class="summary-stat-value">' + formatNumber(stats.yearsManufactured) + ' years</div>';
+                html += '</div>';
+                html += '<div class="summary-stat">';
+                html += '<div class="summary-stat-label">Years Since 2018 Subaru Outback Was Purchased Used (10/04/2024)</div>';
+                html += '<div class="summary-stat-value">' + formatNumber(stats.yearsOwned) + ' years</div>';
+                html += '</div>';
+                html += '<div class="summary-stat">';
+                html += '<div class="summary-stat-label">Total # Days Subaru Outback Purchased Used Since 10/04/2024</div>';
+                html += '<div class="summary-stat-value">' + formatNumber(stats.totalDaysOwned, 0) + ' days</div>';
+                html += '</div>';
+                html += '<div class="summary-stat">';
+                html += '<div class="summary-stat-label">Current Total Miles on Odometer</div>';
+                html += '<div class="summary-stat-value">' + formatNumber(stats.currentTotalMiles) + '</div>';
+                html += '</div>';
                 html += '<div class="summary-stat">';
                 html += '<div class="summary-stat-label">Miles Driven Since Owned</div>';
                 html += '<div class="summary-stat-value">' + formatNumber(stats.milesDriven) + '</div>';
                 html += '</div>';
                 html += '<div class="summary-stat">';
-                html += '<div class="summary-stat-label">Total Fuel Ups</div>';
+                html += '<div class="summary-stat-label">Fuel Ups</div>';
                 html += '<div class="summary-stat-value">' + formatNumber(stats.fuelUps, 0) + '</div>';
                 html += '</div>';
                 html += '<div class="summary-stat">';
-                html += '<div class="summary-stat-label">Average Miles Between Refueling</div>';
+                html += '<div class="summary-stat-label">Average Miles Driven/Tank Between Refueling</div>';
                 html += '<div class="summary-stat-value">' + formatNumber(stats.avgMilesBetweenFill, 1) + '</div>';
                 html += '</div>';
                 html += '<div class="summary-stat">';
@@ -915,48 +1081,56 @@
                 html += '<div class="summary-stat-value">' + formatNumber(stats.totalGallons, 1) + '</div>';
                 html += '</div>';
                 html += '<div class="summary-stat">';
+                html += '<div class="summary-stat-label">Number of 55 Gallon Drums Consumed</div>';
+                html += '<div class="summary-stat-value">' + formatNumber(stats.num55GalDrums, 1) + '</div>';
+                html += '</div>';
+                html += '<div class="summary-stat">';
                 html += '<div class="summary-stat-label">Running Average MPG</div>';
                 html += '<div class="summary-stat-value">' + formatNumber(stats.runningAvgMPG, 1) + '</div>';
                 html += '</div>';
                 html += '<div class="summary-stat">';
-                html += '<div class="summary-stat-label">Lowest MPG per Tank</div>';
+                html += '<div class="summary-stat-label">Lowest MPG per Tank Fillup</div>';
                 html += '<div class="summary-stat-value">' + formatNumber(stats.lowestMPG, 1) + '</div>';
                 html += '</div>';
                 html += '<div class="summary-stat">';
-                html += '<div class="summary-stat-label">Highest MPG per Tank</div>';
+                html += '<div class="summary-stat-label">Highest MPG per Tank Fillup</div>';
                 html += '<div class="summary-stat-value">' + formatNumber(stats.highestMPG, 1) + '</div>';
+                html += '</div>';
+                html += '<div class="summary-stat">';
+                html += '<div class="summary-stat-label">Fuel Tank Capacity (US gallons)</div>';
+                html += '<div class="summary-stat-value">' + formatNumber(stats.fuelTankCapacity, 1) + '</div>';
                 html += '</div>';
                 html += '</div>';
                 
                 html += '<div class="summary-section">';
                 html += '<div class="summary-section-title">💰 Cost Statistics</div>';
                 html += '<div class="summary-stat">';
-                html += '<div class="summary-stat-label">Average Cost per Gallon</div>';
+                html += '<div class="summary-stat-label">Average Cost per Gallon (Lifetime)</div>';
                 html += '<div class="summary-stat-value">$' + formatNumber(stats.avgCostPerGal) + '</div>';
                 html += '</div>';
                 html += '<div class="summary-stat">';
-                html += '<div class="summary-stat-label">Lowest Price per Gallon (since 10/04/2024)</div>';
-                html += '<div class="summary-stat-value">$' + formatNumber(stats.lowestPricePerGal) + '</div>';
+                html += '<div class="summary-stat-label">Lowest Price Per Gallon Since 10/04/2024 (Fry\'s fuel point discount)</div>';
+                let lowestPriceDisplay = '$' + formatNumber(stats.lowestPricePerGal);
+                if (stats.minPriceDate) {
+                    lowestPriceDisplay += ' <span style="color: #888; font-size: 0.85em;">(' + stats.minPriceDate + ')</span>';
+                }
+                html += '<div class="summary-stat-value">' + lowestPriceDisplay + '</div>';
                 html += '</div>';
                 html += '<div class="summary-stat">';
-                html += '<div class="summary-stat-label">Highest Price per Gallon (since 10/04/2024)</div>';
-                html += '<div class="summary-stat-value">$' + formatNumber(stats.highestPricePerGal) + '</div>';
+                html += '<div class="summary-stat-label">Highest Price Per Gallon Since 10/04/2024</div>';
+                let highestPriceDisplay = '$' + formatNumber(stats.highestPricePerGal);
+                if (stats.maxPriceDate) {
+                    highestPriceDisplay += ' <span style="color: #888; font-size: 0.85em;">(' + stats.maxPriceDate + ')</span>';
+                }
+                html += '<div class="summary-stat-value">' + highestPriceDisplay + '</div>';
                 html += '</div>';
                 html += '<div class="summary-stat">';
-                html += '<div class="summary-stat-label">Total Lifetime Gas Cost</div>';
+                html += '<div class="summary-stat-label">My TOTAL "Lifetime" Gas Cost</div>';
                 html += '<div class="summary-stat-value">$' + formatNumber(stats.totalLifetimeCost, 2) + '</div>';
                 html += '</div>';
-                html += '</div>';
-                
-                html += '<div class="summary-section">';
-                html += '<div class="summary-section-title">📅 Ownership</div>';
                 html += '<div class="summary-stat">';
-                html += '<div class="summary-stat-label">Total Days Owned (since 10/04/2024)</div>';
-                html += '<div class="summary-stat-value">' + formatNumber(stats.totalDaysOwned, 0) + ' days</div>';
-                html += '</div>';
-                html += '<div class="summary-stat">';
-                html += '<div class="summary-stat-label">Years Owned (since 10/04/2024)</div>';
-                html += '<div class="summary-stat-value">' + formatNumber(stats.yearsOwned) + ' years</div>';
+                html += '<div class="summary-stat-label">Average Gas Cost per Mile</div>';
+                html += '<div class="summary-stat-value">$' + formatNumber(stats.avgGasCostPerMile, 2) + '</div>';
                 html += '</div>';
                 html += '</div>';
                 
@@ -969,6 +1143,338 @@
             }
         }
         
+        async function loadPriceTrends() {
+            showStatus('Loading price trends...', 'info');
+            try {
+                const spreadsheetId = localStorage.getItem('fuelTracker_spreadsheetId');
+                const sheetName = localStorage.getItem('fuelTracker_sheetName');
+                
+                if (!spreadsheetId || !sheetName) {
+                    showStatus('Please configure spreadsheet settings first', 'error');
+                    return;
+                }
+                
+                // Read columns B (Date) and H ($/Gal) - original structure
+                const response = await gapi.client.sheets.spreadsheets.values.get({
+                    spreadsheetId: spreadsheetId,
+                    range: sheetName + '!B:H',
+                });
+                
+                const values = response.result.values;
+                
+                if (!values || values.length < 2) {
+                    document.getElementById('trendsInfo').textContent = 'No data available to display';
+                    showStatus('No price data found', 'error');
+                    return;
+                }
+                
+                // Parse data: skip header row (index 0)
+                allPriceData = [];
+                for (let i = 1; i < values.length; i++) {
+                    const row = values[i];
+                    if (row && row.length > 6 && row[0] && row[6]) {
+                        const dateStr = String(row[0]).trim();
+                        const priceStr = String(row[6]).replace(/[\$,\s]/g, '');
+                        const price = parseFloat(priceStr);
+                        
+                        if (dateStr && !isNaN(price) && price > 0) {
+                            // Parse date - handle MM/DD/YYYY and YYYY-MM-DD formats
+                            let dateObj;
+                            if (dateStr.includes('/')) {
+                                const parts = dateStr.split('/');
+                                if (parts.length === 3) {
+                                    dateObj = new Date(parseInt(parts[2]), parseInt(parts[0]) - 1, parseInt(parts[1]));
+                                }
+                            } else if (dateStr.includes('-')) {
+                                dateObj = new Date(dateStr);
+                            }
+                            
+                            if (dateObj && !isNaN(dateObj.getTime())) {
+                                allPriceData.push({
+                                    date: dateObj,
+                                    price: price,
+                                    dateStr: dateStr
+                                });
+                            }
+                        }
+                    }
+                }
+                
+                // Sort by date
+                allPriceData.sort(function(a, b) {
+                    return a.date.getTime() - b.date.getTime();
+                });
+                
+                // Set default date range to all time
+                if (allPriceData.length > 0) {
+                    const firstDate = allPriceData[0].date;
+                    const lastDate = allPriceData[allPriceData.length - 1].date;
+                    
+                    // Set date inputs to all time range
+                    document.getElementById('trendStartDate').value = firstDate.toISOString().split('T')[0];
+                    document.getElementById('trendEndDate').value = lastDate.toISOString().split('T')[0];
+                }
+                
+                // Render chart with all data initially
+                renderPriceChart(allPriceData);
+                showStatus('Price trends loaded!', 'success');
+                
+            } catch (err) {
+                console.error('Error loading price trends:', err);
+                showStatus('Error loading price trends: ' + (err.message || 'Unknown error'), 'error');
+                document.getElementById('trendsInfo').textContent = 'Error loading data. Please try again.';
+            }
+        }
+        
+        function applyDateFilter() {
+            const startDateInput = document.getElementById('trendStartDate').value;
+            const endDateInput = document.getElementById('trendEndDate').value;
+            
+            if (!startDateInput || !endDateInput) {
+                showStatus('Please select both start and end dates', 'error');
+                return;
+            }
+            
+            const startDate = new Date(startDateInput);
+            const endDate = new Date(endDateInput);
+            endDate.setHours(23, 59, 59, 999);
+            
+            if (startDate > endDate) {
+                showStatus('Start date must be before end date', 'error');
+                return;
+            }
+            
+            const filteredData = allPriceData.filter(function(item) {
+                return item.date >= startDate && item.date <= endDate;
+            });
+            
+            if (filteredData.length === 0) {
+                showStatus('No data found for selected date range', 'error');
+                return;
+            }
+            
+            renderPriceChart(filteredData);
+            document.getElementById('trendsInfo').textContent = 'Showing ' + filteredData.length + ' data points from ' + 
+                startDateInput + ' to ' + endDateInput;
+        }
+        
+        function resetDateFilter() {
+            if (allPriceData.length === 0) {
+                showStatus('Please load price trends first', 'error');
+                return;
+            }
+            
+            const firstDate = allPriceData[0].date;
+            const lastDate = allPriceData[allPriceData.length - 1].date;
+            
+            document.getElementById('trendStartDate').value = firstDate.toISOString().split('T')[0];
+            document.getElementById('trendEndDate').value = lastDate.toISOString().split('T')[0];
+            
+            renderPriceChart(allPriceData);
+            document.getElementById('trendsInfo').textContent = 'Showing all ' + allPriceData.length + ' data points (all time)';
+        }
+        
+        function calculateTrendline(data) {
+            if (!data || data.length < 2) return null;
+            
+            const firstDate = data[0].date.getTime();
+            const n = data.length;
+            
+            let sumX = 0;
+            let sumY = 0;
+            let sumXY = 0;
+            let sumXX = 0;
+            
+            for (let i = 0; i < n; i++) {
+                const x = (data[i].date.getTime() - firstDate) / (1000 * 60 * 60 * 24);
+                const y = data[i].price;
+                
+                sumX += x;
+                sumY += y;
+                sumXY += x * y;
+                sumXX += x * x;
+            }
+            
+            const slope = (n * sumXY - sumX * sumY) / (n * sumXX - sumX * sumX);
+            const intercept = (sumY - slope * sumX) / n;
+            
+            const trendlineData = [];
+            for (let i = 0; i < n; i++) {
+                const x = (data[i].date.getTime() - firstDate) / (1000 * 60 * 60 * 24);
+                const y = slope * x + intercept;
+                trendlineData.push(y);
+            }
+            
+            return trendlineData;
+        }
+        
+        function renderPriceChart(data) {
+            if (!data || data.length === 0) {
+                document.getElementById('trendsInfo').textContent = 'No data to display';
+                return;
+            }
+            
+            currentChartData = data;
+            
+            const ctx = document.getElementById('priceTrendChart').getContext('2d');
+            
+            if (priceTrendChart) {
+                priceTrendChart.destroy();
+            }
+            
+            const labels = data.map(function(item) {
+                return item.dateStr;
+            });
+            
+            const prices = data.map(function(item) {
+                return item.price;
+            });
+            
+            const avgPrice = prices.reduce(function(a, b) { return a + b; }, 0) / prices.length;
+            
+            const trendlineData = calculateTrendline(data);
+            const showTrendline = document.getElementById('showTrendline').checked;
+            
+            const datasets = [
+                {
+                    label: 'Price per Gallon ($)',
+                    data: prices,
+                    borderColor: '#2E7D32',
+                    backgroundColor: 'rgba(46, 125, 50, 0.1)',
+                    borderWidth: 2,
+                    fill: true,
+                    tension: 0.1,
+                    pointRadius: 3,
+                    pointHoverRadius: 5,
+                    pointBackgroundColor: '#2E7D32',
+                    pointBorderColor: '#fff',
+                    pointBorderWidth: 2
+                },
+                {
+                    label: 'Average Price',
+                    data: new Array(prices.length).fill(avgPrice),
+                    borderColor: '#1B5E20',
+                    borderWidth: 1,
+                    borderDash: [5, 5],
+                    fill: false,
+                    pointRadius: 0,
+                    pointHoverRadius: 0
+                }
+            ];
+            
+            if (showTrendline && trendlineData) {
+                datasets.push({
+                    label: 'Trendline',
+                    data: trendlineData,
+                    borderColor: '#dc3545',
+                    borderWidth: 2,
+                    borderDash: [3, 3],
+                    fill: false,
+                    pointRadius: 0,
+                    pointHoverRadius: 0,
+                    tension: 0
+                });
+            }
+            
+            priceTrendChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: datasets
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: true,
+                            position: 'top',
+                            labels: {
+                                usePointStyle: true,
+                                padding: 15,
+                                font: {
+                                    size: 12
+                                }
+                            }
+                        },
+                        tooltip: {
+                            mode: 'index',
+                            intersect: false,
+                            callbacks: {
+                                label: function(context) {
+                                    if (context.datasetIndex === 0) {
+                                        return 'Price: $' + context.parsed.y.toFixed(3);
+                                    } else if (context.datasetIndex === 1) {
+                                        return 'Average: $' + context.parsed.y.toFixed(3);
+                                    } else if (context.datasetIndex === 2) {
+                                        return 'Trendline: $' + context.parsed.y.toFixed(3);
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'Date',
+                                font: {
+                                    size: 12,
+                                    weight: 'bold'
+                                }
+                            },
+                            ticks: {
+                                maxRotation: 45,
+                                minRotation: 45,
+                                font: {
+                                    size: 10
+                                }
+                            },
+                            grid: {
+                                color: 'rgba(0, 0, 0, 0.05)'
+                            }
+                        },
+                        y: {
+                            title: {
+                                display: true,
+                                text: 'Price per Gallon ($)',
+                                font: {
+                                    size: 12,
+                                    weight: 'bold'
+                                }
+                            },
+                            ticks: {
+                                callback: function(value) {
+                                    return '$' + value.toFixed(3);
+                                },
+                                font: {
+                                    size: 10
+                                }
+                            },
+                            grid: {
+                                color: 'rgba(0, 0, 0, 0.05)'
+                            }
+                        }
+                    },
+                    interaction: {
+                        mode: 'index',
+                        intersect: false
+                    }
+                }
+            });
+            
+            document.getElementById('trendsInfo').textContent = 'Displaying ' + data.length + ' data points';
+        }
+        
+        function toggleTrendline() {
+            if (currentChartData.length === 0) {
+                showStatus('Please load price trends first', 'error');
+                return;
+            }
+            
+            renderPriceChart(currentChartData);
+        }
+        
         function formatNumber(value, decimals) {
             if (!value || value === 'N/A') return 'N/A';
             
@@ -977,7 +1483,6 @@
             
             if (isNaN(num)) return str;
             
-            // If decimals is specified, use it
             if (decimals !== undefined) {
                 return num.toLocaleString('en-US', { 
                     minimumFractionDigits: decimals, 
@@ -985,7 +1490,6 @@
                 });
             }
             
-            // Default formatting for values without specified decimals
             if (num >= 1000) {
                 return num.toLocaleString('en-US', { maximumFractionDigits: 2 });
             } else if (num >= 1) {
@@ -1185,7 +1689,6 @@
                 const fileId = result.id;
                 console.log('Receipt uploaded to Drive:', fileId);
                 
-                // Make the file publicly viewable (anyone with link can view)
                 try {
                     await gapi.client.request({
                         path: '/drive/v3/files/' + fileId + '/permissions',
@@ -1220,17 +1723,13 @@
                 img = document.createElement('img');
                 img.className = 'receipt-image show';
                 
-                // Use Drive thumbnail URL for better compatibility
                 img.src = 'https://drive.google.com/thumbnail?id=' + fileId + '&sz=w800';
                 img.alt = 'Receipt';
                 
-                // Add error handler
                 img.onerror = function() {
                     console.error('Failed to load receipt image with file ID:', fileId);
-                    // Try alternative URL format
                     img.src = 'https://drive.google.com/uc?export=view&id=' + fileId;
                     
-                    // If that also fails
                     img.onerror = function() {
                         console.error('Alternative URL also failed. File ID:', fileId);
                         img.alt = 'Receipt image failed to load. File ID: ' + fileId;
@@ -1238,7 +1737,6 @@
                         img.style.background = '#ffebee';
                         img.style.border = '2px solid #c62828';
                         
-                        // Create a link to open in Drive directly
                         const link = document.createElement('a');
                         link.href = 'https://drive.google.com/file/d/' + fileId + '/view';
                         link.target = '_blank';
@@ -1251,7 +1749,6 @@
                     };
                 };
                 
-                // Add load success handler
                 img.onload = function() {
                     console.log('Receipt image loaded successfully for file ID:', fileId);
                 };
@@ -1453,3 +1950,4 @@
     </script>
 </body>
 </html>
+
