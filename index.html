@@ -787,10 +787,29 @@
                         daysAgo = ' (' + diffDays + ' days ago)';
                     }
                     
+                    // Find last non-blank value in Column K (index 9 from B, "Mileage Next Service")
+                    let mileageNextService = null;
+                    for (let i = dataRows.length - 1; i >= 0; i--) {
+                        const kVal = dataRows[i][9];
+                        if (kVal && String(kVal).trim() !== '') {
+                            mileageNextService = parseFloat(String(kVal).replace(/,/g, ''));
+                            break;
+                        }
+                    }
+
+                    // Build oil change status line
+                    let oilChangeHtml = '';
+                    if (mileageNextService !== null && lastOdometer) {
+                        const milesUntil = Math.round(mileageNextService - lastOdometer);
+                        let oilColor = milesUntil <= 500 ? '#c62828' : (milesUntil <= 1000 ? '#e65100' : '#2e7d32');
+                        let oilIcon = milesUntil <= 500 ? '⚠️' : '🔧';
+                        oilChangeHtml = '<br>' + oilIcon + ' Miles Until Oil Change: <strong style="color:' + oilColor + '">' + milesUntil.toLocaleString() + ' miles</strong>';
+                    }
+
                     if (lastDate && lastOdometer) {
                         document.getElementById('lastFillInfo').style.display = 'block';
-                        document.getElementById('lastFillDetails').innerHTML = 
-                            '📅 Date: ' + lastDate + daysAgo + '<br>🚗 Odometer (prior): ' + lastOdometer.toLocaleString() + ' miles';
+                        document.getElementById('lastFillDetails').innerHTML =
+                            '📅 Date: ' + lastDate + daysAgo + '<br>🚗 Odometer (prior): ' + lastOdometer.toLocaleString() + ' miles' + oilChangeHtml;
                         showStatus('Last fill-up loaded successfully', 'success');
                     }
                     
@@ -2194,4 +2213,3 @@
     </script>
 </body>
 </html>
-
