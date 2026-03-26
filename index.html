@@ -787,30 +787,41 @@
                         daysAgo = ' (' + diffDays + ' days ago)';
                     }
                     
-                    // Find last non-blank value in Column K (index 9 from B, "Mileage Next Service")
-                    let mileageNextService = null;
-                    for (let i = dataRows.length - 1; i >= 0; i--) {
-                        const kVal = dataRows[i][9];
-                        if (kVal && String(kVal).trim() !== '') {
-                            mileageNextService = parseFloat(String(kVal).replace(/,/g, ''));
-                            break;
-                        }
-                    }
-
-                    // Build oil change status line
-                    let oilChangeHtml = '';
-                    if (mileageNextService !== null && lastOdometer) {
-                        const milesUntil = Math.round(mileageNextService - lastOdometer);
-                        let oilColor = milesUntil <= 500 ? '#c62828' : (milesUntil <= 1000 ? '#e65100' : '#2e7d32');
-                        let oilIcon = milesUntil <= 500 ? '⚠️' : '🔧';
-                        oilChangeHtml = '<br>' + oilIcon + ' Miles Until Oil Change: <strong style="color:' + oilColor + '">' + milesUntil.toLocaleString() + ' miles</strong>';
-                    }
-
                     if (lastDate && lastOdometer) {
                         document.getElementById('lastFillInfo').style.display = 'block';
                         document.getElementById('lastFillDetails').innerHTML =
-                            '📅 Date: ' + lastDate + daysAgo + '<br>🚗 Odometer (prior): ' + lastOdometer.toLocaleString() + ' miles' + oilChangeHtml;
+                            '📅 Date: ' + lastDate + daysAgo + '<br>🚗 Odometer (prior): ' + lastOdometer.toLocaleString() + ' miles';
                         showStatus('Last fill-up loaded successfully', 'success');
+                    }
+
+                    // Fetch Column K ("Mileage Next Service") directly — more reliable than row indexing
+                    try {
+                        const kResponse = await gapi.client.sheets.spreadsheets.values.get({
+                            spreadsheetId: spreadsheetId,
+                            range: sheetName + '!K:K',
+                        });
+                        const kValues = kResponse.result.values;
+                        let mileageNextService = null;
+                        if (kValues) {
+                            for (let i = kValues.length - 1; i >= 0; i--) {
+                                const kVal = kValues[i] && kValues[i][0];
+                                const kNum = parseFloat(String(kVal || '').replace(/,/g, ''));
+                                if (kVal && String(kVal).trim() !== '' && !isNaN(kNum) && kNum > 0) {
+                                    mileageNextService = kNum;
+                                    break;
+                                }
+                            }
+                        }
+                        if (mileageNextService !== null && lastOdometer) {
+                            const milesUntil = Math.round(mileageNextService - lastOdometer);
+                            const oilColor = milesUntil <= 500 ? '#c62828' : (milesUntil <= 1000 ? '#e65100' : '#2e7d32');
+                            const oilIcon  = milesUntil <= 500 ? '⚠️' : '🔧';
+                            const current = document.getElementById('lastFillDetails').innerHTML;
+                            document.getElementById('lastFillDetails').innerHTML =
+                                current + '<br>' + oilIcon + ' Miles Until Oil Change: <strong style="color:' + oilColor + '">' + milesUntil.toLocaleString() + ' miles</strong>';
+                        }
+                    } catch (kErr) {
+                        console.warn('Could not load Mileage Next Service from Column K:', kErr);
                     }
                     
                     const milesFillValues = [];
@@ -2213,3 +2224,4 @@
     </script>
 </body>
 </html>
+
