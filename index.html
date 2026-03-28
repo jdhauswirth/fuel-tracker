@@ -722,7 +722,18 @@
                 document.getElementById('loginSection').style.display = 'none';
                 document.getElementById('appContent').style.display = 'block';
                 showStatus('Signed in successfully!', 'success');
+
+                // Wait for gapi to finish initializing (critical on slower mobile connections)
+                let attempts = 0;
+                while (!gapiInited && attempts < 20) {
+                    await new Promise(resolve => setTimeout(resolve, 500));
+                    attempts++;
+                }
                 
+                if (!gapiInited) {
+                    await initializeGapiClient();
+                }
+
                 await loadLastOdometer();
             };
             
