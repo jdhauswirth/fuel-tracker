@@ -702,10 +702,15 @@
                 return;
             }
             
-            localStorage.setItem('fuelTracker_clientId', clientId);
-            localStorage.setItem('fuelTracker_apiKey', apiKey);
-            localStorage.setItem('fuelTracker_spreadsheetId', spreadsheetId);
-            localStorage.setItem('fuelTracker_sheetName', sheetName);
+            try {
+                localStorage.setItem('fuelTracker_clientId', clientId);
+                localStorage.setItem('fuelTracker_apiKey', apiKey);
+                localStorage.setItem('fuelTracker_spreadsheetId', spreadsheetId);
+                localStorage.setItem('fuelTracker_sheetName', sheetName);
+            } catch(e) {
+                // localStorage blocked (iOS "Block All Cookies" setting) — continue anyway
+                console.warn('localStorage unavailable:', e);
+            }
             
             if (!gapiInited || !gisInited) {
                 initializeGapiClient();
