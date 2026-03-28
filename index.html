@@ -587,6 +587,21 @@
         let priceTrendChart = null;
         let allPriceData = [];
         let currentChartData = [];
+
+
+        //added workaround to block of sign in ->
+        let sessionVars = {}; // in-memory fallback when localStorage is blocked (iOS)
+        
+        function storageGet(key) {
+            try { return storageGet(key) || sessionVars[key] || null; }
+            catch(e) { return sessionVars[key] || null; }
+        }
+        
+        function storageSet(key, value) {
+            sessionVars[key] = value;
+            try { storageSet(key, value); } catch(e) {}
+        }    
+            
         
         const DISCOVERY_DOC = 'https://sheets.googleapis.com/$discovery/rest?version=v4';
         const SCOPES = 'https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/drive.file';
@@ -669,7 +684,7 @@
         }
         
         async function initializeGapiClient() {
-            const apiKey = localStorage.getItem('fuelTracker_apiKey') || document.getElementById('apiKey').value;
+            const apiKey = storageGet('fuelTracker_apiKey') || document.getElementById('apiKey').value;
             if (!apiKey) return;
             
             await gapi.client.init({
@@ -680,7 +695,7 @@
         }
         
         function gisLoaded() {
-            const clientId = localStorage.getItem('fuelTracker_clientId') || document.getElementById('clientId').value;
+            const clientId = storageGet('fuelTracker_clientId') || document.getElementById('clientId').value;
             if (!clientId) return;
             
             tokenClient = google.accounts.oauth2.initTokenClient({
@@ -702,15 +717,20 @@
                 return;
             }
             
-            try {
-                localStorage.setItem('fuelTracker_clientId', clientId);
-                localStorage.setItem('fuelTracker_apiKey', apiKey);
-                localStorage.setItem('fuelTracker_spreadsheetId', spreadsheetId);
-                localStorage.setItem('fuelTracker_sheetName', sheetName);
-            } catch(e) {
-                // localStorage blocked (iOS "Block All Cookies" setting) — continue anyway
-                console.warn('localStorage unavailable:', e);
-            }
+            /try {
+            /    storageSet('fuelTracker_clientId', clientId);
+            /    storageSet('fuelTracker_apiKey', apiKey);
+            /    storageSet('fuelTracker_spreadsheetId', spreadsheetId);
+            /    storageSet('fuelTracker_sheetName', sheetName);
+            /} catch(e) {
+            /    // localStorage blocked (iOS "Block All Cookies" setting) — continue anyway
+            /    console.warn('localStorage unavailable:', e);
+            /}
+            / replace above with below
+            storageSet('fuelTracker_clientId', clientId);
+            storageSet('fuelTracker_apiKey', apiKey);
+            storageSet('fuelTracker_spreadsheetId', spreadsheetId);
+            storageSet('fuelTracker_sheetName', sheetName);
             
             if (!gapiInited || !gisInited) {
                 initializeGapiClient();
@@ -761,8 +781,8 @@
         
         async function loadLastOdometer() {
             try {
-                const spreadsheetId = localStorage.getItem('fuelTracker_spreadsheetId');
-                const sheetName = localStorage.getItem('fuelTracker_sheetName');
+                const spreadsheetId = storageGet('fuelTracker_spreadsheetId');
+                const sheetName = storageGet('fuelTracker_sheetName');
                 
                 const response = await gapi.client.sheets.spreadsheets.values.get({
                     spreadsheetId: spreadsheetId,
@@ -931,8 +951,8 @@
         async function loadHistory() {
             showStatus('Loading history...', 'info');
             try {
-                const spreadsheetId = localStorage.getItem('fuelTracker_spreadsheetId');
-                const sheetName = localStorage.getItem('fuelTracker_sheetName');
+                const spreadsheetId = storageGet('fuelTracker_spreadsheetId');
+                const sheetName = storageGet('fuelTracker_sheetName');
                 
                 const response = await gapi.client.sheets.spreadsheets.values.get({
                     spreadsheetId: spreadsheetId,
@@ -1012,8 +1032,8 @@
             
             showStatus('Loading summary...', 'info');
             try {
-                const spreadsheetId = localStorage.getItem('fuelTracker_spreadsheetId');
-                const sheetName = localStorage.getItem('fuelTracker_sheetName');
+                const spreadsheetId = storageGet('fuelTracker_spreadsheetId');
+                const sheetName = storageGet('fuelTracker_sheetName');
                 
                 if (!spreadsheetId || !sheetName) {
                     console.log('ERROR: Missing spreadsheetId or sheetName');
@@ -1439,8 +1459,8 @@
         async function loadPriceTrends() {
             showStatus('Loading price trends...', 'info');
             try {
-                const spreadsheetId = localStorage.getItem('fuelTracker_spreadsheetId');
-                const sheetName = localStorage.getItem('fuelTracker_sheetName');
+                const spreadsheetId = storageGet('fuelTracker_spreadsheetId');
+                const sheetName = storageGet('fuelTracker_sheetName');
                 
                 if (!spreadsheetId || !sheetName) {
                     showStatus('Please configure spreadsheet settings first', 'error');
@@ -2115,8 +2135,8 @@
         });
         
         async function writeToSheet(data) {
-            const spreadsheetId = localStorage.getItem('fuelTracker_spreadsheetId');
-            const sheetName = localStorage.getItem('fuelTracker_sheetName');
+            const spreadsheetId = storageGet('fuelTracker_spreadsheetId');
+            const sheetName = storageGet('fuelTracker_sheetName');
             
             const sheetMetadata = await gapi.client.sheets.spreadsheets.get({
                 spreadsheetId: spreadsheetId
@@ -2221,10 +2241,10 @@
         }
         
         window.addEventListener('load', function() {
-            const savedClientId = localStorage.getItem('fuelTracker_clientId');
-            const savedApiKey = localStorage.getItem('fuelTracker_apiKey');
-            const savedSpreadsheetId = localStorage.getItem('fuelTracker_spreadsheetId');
-            const savedSheetName = localStorage.getItem('fuelTracker_sheetName');
+            const savedClientId = storageGet('fuelTracker_clientId');
+            const savedApiKey = storageGet('fuelTracker_apiKey');
+            const savedSpreadsheetId = storageGet('fuelTracker_spreadsheetId');
+            const savedSheetName = storageGet('fuelTracker_sheetName');
             
             if (savedClientId) document.getElementById('clientId').value = savedClientId;
             if (savedApiKey) document.getElementById('apiKey').value = savedApiKey;
