@@ -590,17 +590,17 @@
 
 
         //added workaround to block of sign in ->
-        let sessionVars = {}; // in-memory fallback when localStorage is blocked (iOS)
-        
+        let sessionVars = {};
+
         function storageGet(key) {
-            try { return storageGet(key) || sessionVars[key] || null; }
+            try { return localStorage.getItem(key) || sessionVars[key] || null; }
             catch(e) { return sessionVars[key] || null; }
         }
         
         function storageSet(key, value) {
             sessionVars[key] = value;
-            try { storageSet(key, value); } catch(e) {}
-        }    
+            try { localStorage.setItem(key, value); } catch(e) {}
+        }
             
         
         const DISCOVERY_DOC = 'https://sheets.googleapis.com/$discovery/rest?version=v4';
