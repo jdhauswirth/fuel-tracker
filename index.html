@@ -477,7 +477,7 @@
                 <div class="tab-row-divider"></div>
                 <!-- Row 2 -->
                 <button class="tab" onclick="showTab('trends', event)">📈 Price Trends</button>
-                <button class="tab" onclick="showTab('oilChange', event)">🔧 Oil Change</button>
+                <button class="tab" onclick="showTab('oilChange', event)">🔧 Oil Changes</button>
                 <button class="tab" onclick="showTab('documents', event)">📁 Documents</button>
             </div>
             
@@ -635,10 +635,32 @@
                             <button type="button" class="adjust-btn" onclick="adjustOcOdometer(-1)">-</button>
                             <input type="text" id="ocOdometer" placeholder="Current mileage" required
                                    inputmode="numeric" autocomplete="off"
-                                   oninput="formatOcOdometer(this)">
+                                   oninput="formatOcOdometer(this)"
+                                   onchange="recalcOcNextService()">
                             <button type="button" class="adjust-btn" onclick="adjustOcOdometer(1)">+</button>
                         </div>
                         <div class="info-text" id="ocOdometerHint"></div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="ocInterval">Service Interval (mi)</label>
+                        <div class="input-with-buttons">
+                            <button type="button" class="adjust-btn" onclick="adjustOcInterval(-100)">-</button>
+                            <input type="text" id="ocInterval" value="3,500"
+                                   inputmode="numeric" autocomplete="off"
+                                   oninput="formatOcInterval(this)"
+                                   onchange="recalcOcNextService()">
+                            <button type="button" class="adjust-btn" onclick="adjustOcInterval(100)">+</button>
+                        </div>
+                        <div class="info-text">Miles between oil changes (adjusted in 100-mile steps)</div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="ocNextService">Odometer at Next Service</label>
+                        <input type="text" id="ocNextService" placeholder="e.g. 73,500" required
+                               inputmode="numeric" autocomplete="off"
+                               oninput="formatOcNextService(this)">
+                        <div class="info-text" id="ocNextServiceHint">Calculated automatically from Odometer + Interval</div>
                     </div>
 
                     <div class="form-group">
@@ -672,14 +694,6 @@
                         <label for="ocNotes">Notes <span style="font-weight:normal; color:#999;">(optional)</span></label>
                         <input type="text" id="ocNotes" placeholder="e.g. Jiffy Lube, Valvoline…" maxlength="200">
                         <div class="info-text"><span id="ocNotesCount">0</span> / 200 characters</div>
-                    </div>
-
-                    <div class="form-group">
-                        <label for="ocNextService">Odometer at Next Service</label>
-                        <input type="text" id="ocNextService" placeholder="e.g. 73,500" required
-                               inputmode="numeric" autocomplete="off"
-                               oninput="formatOcNextService(this)">
-                        <div class="info-text" id="ocNextServiceHint">Enter the odometer reading at which the next service is due</div>
                     </div>
 
                     <div class="form-group">
@@ -2727,15 +2741,14 @@
                     'Last recorded odometer: ' + lastOdometer.toLocaleString() + ' mi';
             }
 
-            // Default next service = current odometer + 3,500 mile interval (absolute target)
-            const defaultNextService = lastOdometer
-                ? Math.round(lastOdometer + 3500)
-                : 3500;
-            document.getElementById('ocNextService').value = defaultNextService.toLocaleString();
-            document.getElementById('ocNextServiceHint').textContent =
-                lastOdometer
-                    ? 'Target odometer for next service (current + 3,500 mi interval)'
-                    : 'Enter the odometer reading at which the next service is due';
+            // Set default interval to 3,500 (preserve if user already changed it)
+            const intervalField = document.getElementById('ocInterval');
+            if (!intervalField.value || intervalField.value === '0') {
+                intervalField.value = '3,500';
+            }
+
+            // Calculate and display next service odometer
+            recalcOcNextService();
 
             showOcStatus('', '');
         }
@@ -2758,6 +2771,31 @@
             const raw = parseInt(input.value.replace(/[^0-9]/g, '') || '0', 10);
             const newVal = Math.max(0, raw + delta);
             input.value = newVal.toLocaleString();
+            recalcOcNextService();
+        }
+
+        function formatOcInterval(input) {
+            const raw = input.value.replace(/[^0-9]/g, '');
+            input.value = raw ? parseInt(raw, 10).toLocaleString() : '';
+        }
+
+        function adjustOcInterval(delta) {
+            const input = document.getElementById('ocInterval');
+            const raw = parseInt(input.value.replace(/[^0-9]/g, '') || '3500', 10);
+            const newVal = Math.max(100, raw + delta);
+            input.value = newVal.toLocaleString();
+            recalcOcNextService();
+        }
+
+        function recalcOcNextService() {
+            const odoRaw = parseInt(document.getElementById('ocOdometer').value.replace(/[^0-9]/g, '') || '0', 10);
+            const intRaw = parseInt(document.getElementById('ocInterval').value.replace(/[^0-9]/g, '') || '3500', 10);
+            if (odoRaw > 0) {
+                const next = odoRaw + intRaw;
+                document.getElementById('ocNextService').value = next.toLocaleString();
+                document.getElementById('ocNextServiceHint').textContent =
+                    odoRaw.toLocaleString() + ' + ' + intRaw.toLocaleString() + ' mi = ' + next.toLocaleString() + ' mi';
+            }
         }
 
         function formatOcNextService(input) {
