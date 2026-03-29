@@ -635,8 +635,8 @@
                             <button type="button" class="adjust-btn" onclick="adjustOcOdometer(-1)">-</button>
                             <input type="text" id="ocOdometer" placeholder="Current mileage" required
                                    inputmode="numeric" autocomplete="off"
-                                   oninput="formatOcOdometer(this)"
-                                   onchange="recalcOcNextService()">
+                                   oninput="formatOcOdometer(this); recalcOcNextService()"
+                                   onblur="recalcOcNextService()">
                             <button type="button" class="adjust-btn" onclick="adjustOcOdometer(1)">+</button>
                         </div>
                         <div class="info-text" id="ocOdometerHint"></div>
@@ -648,8 +648,8 @@
                             <button type="button" class="adjust-btn" onclick="adjustOcInterval(-100)">-</button>
                             <input type="text" id="ocInterval" value="3,500"
                                    inputmode="numeric" autocomplete="off"
-                                   oninput="formatOcInterval(this)"
-                                   onchange="recalcOcNextService()">
+                                   oninput="formatOcInterval(this); recalcOcNextService()"
+                                   onblur="recalcOcNextService()">
                             <button type="button" class="adjust-btn" onclick="adjustOcInterval(100)">+</button>
                         </div>
                         <div class="info-text">Miles between oil changes (adjusted in 100-mile steps)</div>
@@ -2353,20 +2353,23 @@
                 img = document.createElement('img');
                 img.className = 'receipt-image show';
                 
-                img.src = 'https://drive.google.com/thumbnail?id=' + fileId + '&sz=w800';
+                // Use lh3 CDN URL — works for publicly shared Drive files without session cookies (fixes iOS Safari)
+                img.src = 'https://lh3.googleusercontent.com/d/' + fileId;
                 img.alt = 'Receipt';
-                
+
                 img.onerror = function() {
-                    console.error('Failed to load receipt image with file ID:', fileId);
+                    console.error('Failed to load receipt via lh3, trying uc?export=view. File ID:', fileId);
+                    img.onerror = null;
                     img.src = 'https://drive.google.com/uc?export=view&id=' + fileId;
-                    
+
                     img.onerror = function() {
                         console.error('Alternative URL also failed. File ID:', fileId);
+                        img.onerror = null;
                         img.alt = 'Receipt image failed to load. File ID: ' + fileId;
                         img.style.padding = '20px';
                         img.style.background = '#ffebee';
                         img.style.border = '2px solid #c62828';
-                        
+
                         const link = document.createElement('a');
                         link.href = 'https://drive.google.com/file/d/' + fileId + '/view';
                         link.target = '_blank';
@@ -3515,44 +3518,63 @@
         function toggleDocView(fileId, buttonElement, isPdf) {
             const container = buttonElement.parentElement.nextElementSibling;
 
+            // Toggle off if already showing content
             if (container && container.classList.contains('doc-view-container') && container.children.length > 0) {
                 container.innerHTML = '';
                 buttonElement.textContent = '📎  View';
                 return;
             }
 
+            const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+
             if (isPdf) {
-                const link = document.createElement('a');
-                link.href = 'https://drive.google.com/file/d/' + fileId + '/view';
-                link.target = '_blank';
-                link.textContent = '📄  Open PDF in Drive';
-                link.style.cssText = 'display:block; margin-top:8px; color:#1565c0; font-size:13px; text-decoration:underline;';
-                if (container) container.appendChild(link);
-                buttonElement.textContent = '📎  Hide';
-            } else {
-                const img = document.createElement('img');
-                img.className = 'receipt-image show';
-                img.src = 'https://drive.google.com/thumbnail?id=' + fileId + '&sz=w800';
-                img.alt = 'Document';
-
-                img.onerror = function() {
-                    img.src = 'https://drive.google.com/uc?export=view&id=' + fileId;
-                    img.onerror = function() {
-                        // Final fallback: just provide a Drive link
-                        if (container) {
-                            const link = document.createElement('a');
-                            link.href = 'https://drive.google.com/file/d/' + fileId + '/view';
-                            link.target = '_blank';
-                            link.textContent = '📂  Open in Google Drive';
-                            link.style.cssText = 'display:block; margin-top:8px; color:#1565c0; font-size:13px; text-decoration:underline;';
-                            container.appendChild(link);
-                        }
-                    };
-                };
-
-                if (container) container.appendChild(img);
-                buttonElement.textContent = '📎  Hide';
+                // Use the download/export URL — works for publicly shared files without Drive session cookies.
+                // On iOS Safari this opens the PDF in the built-in viewer (triggered from click context).
+                // On desktop, embed via /preview which is designed for iframes.
+                const pdfDownloadUrl = 'https://drive.google.com/uc?export=download&id=' + fileId;
+                if (isIOS) {
+                    window.open(pdfDownloadUrl, '_blank');
+                    // Nothing shown inline on iOS — button stays as "View"
+                } else {
+                    const iframe = document.createElement('iframe');
+                    iframe.src = 'https://drive.google.com/file/d/' + fileId + '/preview';
+                    iframe.style.cssText = 'width:100%; height:500px; border:none; border-radius:8px; margin-top:8px;';
+                    iframe.allow = 'autoplay';
+                    if (container) container.appendChild(iframe);
+                    buttonElement.textContent = '📎  Hide';
+                }
+                return;
             }
+
+            // Images: lh3.googleusercontent.com/d/ is Google's CDN URL for publicly shared Drive files.
+            // It serves content without requiring Drive session cookies — works on iOS Safari.
+            const img = document.createElement('img');
+            img.className = 'receipt-image show';
+            img.src = 'https://lh3.googleusercontent.com/d/' + fileId;
+            img.alt = 'Document';
+
+            img.onerror = function() {
+                // First fallback: uc?export=view (also cookie-free for public files)
+                img.onerror = null;
+                img.src = 'https://drive.google.com/uc?export=view&id=' + fileId;
+                img.onerror = function() {
+                    // Final fallback: Drive link
+                    img.onerror = null;
+                    if (container) {
+                        container.innerHTML = '';
+                        const link = document.createElement('a');
+                        link.href = 'https://drive.google.com/file/d/' + fileId + '/view';
+                        link.target = '_blank';
+                        link.textContent = '📂  Open in Google Drive';
+                        link.style.cssText = 'display:block; margin-top:8px; color:#1565c0; font-size:13px; text-decoration:underline;';
+                        container.appendChild(link);
+                        buttonElement.textContent = '📎  View';
+                    }
+                };
+            };
+
+            if (container) container.appendChild(img);
+            buttonElement.textContent = '📎  Hide';
         }
 
         // Wire up Documents file input preview (image only; PDFs show filename)
