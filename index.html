@@ -3009,6 +3009,14 @@
             const aValues = colAResp.result.values || [];
             const nextRow = aValues.length + 1;
 
+            // Build "Date Doc Added" timestamp for column E
+            const now = new Date();
+            const dateAdded = now.getFullYear() + '-' +
+                String(now.getMonth() + 1).padStart(2, '0') + '-' +
+                String(now.getDate()).padStart(2, '0') + ' ' +
+                String(now.getHours()).padStart(2, '0') + ':' +
+                String(now.getMinutes()).padStart(2, '0');
+
             await gapi.client.sheets.spreadsheets.values.batchUpdate({
                 spreadsheetId: spreadsheetId,
                 resource: {
@@ -3017,13 +3025,50 @@
                         { range: DOC_SHEET + '!A' + nextRow, values: [[data.date]] },
                         { range: DOC_SHEET + '!B' + nextRow, values: [[data.type]] },
                         { range: DOC_SHEET + '!C' + nextRow, values: [[data.name]] },
-                        { range: DOC_SHEET + '!D' + nextRow, values: [[data.fileId]] }
+                        { range: DOC_SHEET + '!D' + nextRow, values: [[data.fileId]] },
+                        { range: DOC_SHEET + '!E' + nextRow, values: [[dateAdded]] }
                     ]
                 }
             });
         }
 
         // Load and display existing documents from the sheet
+        // ── Extract a raw Drive file ID from either a raw ID or a full share URL ──
+        function extractDriveFileId(value) {
+            if (!value) return '';
+            const s = String(value).trim();
+            // Already a raw file ID (no slashes, looks like a Drive ID)
+            if (s && !s.includes('/') && !s.includes('?') && s.length > 10) return s;
+            // /file/d/FILEID  or  /open?id=FILEID
+            const m1 = s.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
+            if (m1) return m1[1];
+            const m2 = s.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+            if (m2) return m2[1];
+            // thumbnail or uc export links
+            const m3 = s.match(/thumbnail\?id=([a-zA-Z0-9_-]+)/);
+            if (m3) return m3[1];
+            // Fallback — return as-is and let Drive handle it
+            return s;
+        }
+
+        // ── Determine if a Drive file is a PDF from its source URL or name ──
+        function guessIsPdf(rawDValue, name) {
+            const s = String(rawDValue || '') + ' ' + String(name || '');
+            return s.toLowerCase().includes('pdf') || String(name || '').toLowerCase().endsWith('.pdf');
+        }
+
+        // ── Parse a date string into a comparable value for sorting ──
+        function parseDateForSort(d) {
+            if (!d) return 0;
+            const s = String(d).trim();
+            // YYYY-MM-DD  →  sort directly as string (ISO is lexicographically correct)
+            if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s;
+            // MM/DD/YYYY
+            const m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+            if (m) return m[3] + '-' + m[1].padStart(2,'0') + '-' + m[2].padStart(2,'0');
+            return s;
+        }
+
         async function loadDocuments() {
             const spreadsheetId = storageGet('fuelTracker_spreadsheetId');
             if (!spreadsheetId || !accessToken) {
@@ -3035,50 +3080,78 @@
             listEl.innerHTML = '<p style="text-align:center; color:#999;">Loading…</p>';
 
             try {
+                // Read A:E (cols A–E, including new "Date Doc Added" col E)
                 const resp = await gapi.client.sheets.spreadsheets.values.get({
                     spreadsheetId: spreadsheetId,
-                    range: 'Documents!A:D'
+                    range: 'Documents!A:E'
                 });
                 const rows = resp.result.values || [];
 
-                // Skip header row (row 1) and any rows without a date
-                const dataRows = rows.slice(1).filter(function(r) {
-                    return r && r[0] && String(r[0]).trim();
-                });
+                // Keep header-skipped rows that have a date; track original 1-based sheet row
+                const dataRows = [];
+                for (let i = 1; i < rows.length; i++) {
+                    const r = rows[i];
+                    if (r && r[0] && String(r[0]).trim()) {
+                        dataRows.push({ row: r, sheetRowIndex: i + 1 }); // +1 because sheet is 1-indexed
+                    }
+                }
 
                 if (dataRows.length === 0) {
                     listEl.innerHTML = '<p style="text-align:center; color:#999; font-size:14px;">No documents saved yet</p>';
                     return;
                 }
 
-                // Show newest first
-                const reversed = dataRows.slice().reverse();
+                // Sort descending by Column A date
+                dataRows.sort(function(a, b) {
+                    const da = parseDateForSort(a.row[0]);
+                    const db = parseDateForSort(b.row[0]);
+                    return db > da ? 1 : db < da ? -1 : 0;
+                });
+
                 let html = '';
-                reversed.forEach(function(row) {
-                    const date   = row[0] || '';
-                    const type   = row[1] || '';
-                    const name   = row[2] || '';
-                    const fileId = row[3] || '';
+                dataRows.forEach(function(entry) {
+                    const row          = entry.row;
+                    const sheetRowIdx  = entry.sheetRowIndex;
+                    const date         = row[0] || '';
+                    const type         = row[1] || '';
+                    const name         = row[2] || '';
+                    const rawD         = row[3] || '';
+                    const dateAdded    = row[4] || '';
+                    const fileId       = extractDriveFileId(rawD);
+                    const isPdf        = guessIsPdf(rawD, name);
+                    const icon         = isPdf ? '📄' : '🖼️';
+                    const safeId       = escapeHtml(fileId);
+                    const safeRow      = String(sheetRowIdx);
 
-                    const isPdf = fileId && name.toLowerCase().endsWith('.pdf');
-                    const icon  = isPdf ? '📄' : '🖼️';
-
-                    html += '<div class="history-item" style="border-left-color: #1565c0;">';
-                    html += '<div class="history-item-date">' + icon + '  ' + date + '</div>';
+                    html += '<div class="history-item" style="border-left-color: #1565c0;" id="docRow_' + safeRow + '">';
+                    html += '<div class="history-item-date">' + icon + '  ' + escapeHtml(date) + '</div>';
                     html += '<div class="history-item-detail"><strong>' + escapeHtml(name) + '</strong></div>';
                     if (type) {
                         html += '<div class="history-item-detail" style="color:#888;">Type: ' + escapeHtml(type) + '</div>';
                     }
+                    if (dateAdded) {
+                        html += '<div class="history-item-detail" style="color:#aaa; font-size:12px;">Added: ' + escapeHtml(dateAdded) + '</div>';
+                    }
+
+                    // View + Open in Drive
                     if (fileId) {
                         html += '<div style="margin-top:6px;">';
                         html += '<button class="receipt-btn" style="background:#1565c0;" ' +
-                                'onclick="toggleDocView(\'' + fileId + '\', this, ' + (isPdf ? 'true' : 'false') + ')">📎  View</button>';
-                        html += '<a href="https://drive.google.com/file/d/' + fileId + '/view" target="_blank" ' +
+                                'onclick="toggleDocView(\'' + safeId + '\', this, ' + (isPdf ? 'true' : 'false') + ')">📎  View</button>';
+                        html += '<a href="https://drive.google.com/file/d/' + safeId + '/view" target="_blank" ' +
                                 'style="margin-left:10px; font-size:12px; color:#1565c0;">Open in Drive ↗</a>';
                         html += '</div>';
                         html += '<div class="doc-view-container"></div>';
                     }
+
+                    // Delete button + inline "X" confirmation
+                    html += '<div style="margin-top:8px;" id="delArea_' + safeRow + '">';
+                    html += '<button onclick="showDeleteConfirm(' + safeRow + ')" ' +
+                            'style="width:auto; padding:5px 12px; font-size:12px; background:#e53935; color:#fff; ' +
+                            'border:none; border-radius:6px; cursor:pointer;">🗑️ Delete</button>';
                     html += '</div>';
+
+                    html += '</div>'; // end history-item
                 });
 
                 listEl.innerHTML = html;
@@ -3098,28 +3171,108 @@
                 .replace(/"/g, '&quot;');
         }
 
+        // Show inline delete confirmation (requires uppercase "X")
+        function showDeleteConfirm(sheetRowIndex) {
+            const delArea = document.getElementById('delArea_' + sheetRowIndex);
+            if (!delArea) return;
+            delArea.innerHTML =
+                '<div style="margin-top:4px; padding:8px; background:#fff3e0; border-radius:6px; border:1px solid #e53935;">' +
+                '<span style="font-size:12px; color:#b71c1c; font-weight:600;">Type uppercase X to confirm delete</span>' +
+                '<div style="display:flex; gap:6px; margin-top:6px; align-items:center;">' +
+                '<input type="text" id="delInput_' + sheetRowIndex + '" maxlength="1" placeholder="X" ' +
+                'style="width:48px; padding:6px; border:2px solid #e53935; border-radius:4px; font-size:16px; ' +
+                'text-align:center; font-weight:bold;" autocomplete="off">' +
+                '<button onclick="confirmDelete(' + sheetRowIndex + ')" ' +
+                'style="padding:6px 12px; background:#e53935; color:#fff; border:none; border-radius:4px; ' +
+                'font-size:13px; font-weight:600; cursor:pointer;">Delete</button>' +
+                '<button onclick="cancelDelete(' + sheetRowIndex + ')" ' +
+                'style="padding:6px 10px; background:#aaa; color:#fff; border:none; border-radius:4px; ' +
+                'font-size:13px; cursor:pointer;">Cancel</button>' +
+                '</div></div>';
+        }
+
+        function cancelDelete(sheetRowIndex) {
+            const delArea = document.getElementById('delArea_' + sheetRowIndex);
+            if (!delArea) return;
+            delArea.innerHTML =
+                '<button onclick="showDeleteConfirm(' + sheetRowIndex + ')" ' +
+                'style="width:auto; padding:5px 12px; font-size:12px; background:#e53935; color:#fff; ' +
+                'border:none; border-radius:6px; cursor:pointer;">🗑️ Delete</button>';
+        }
+
+        async function confirmDelete(sheetRowIndex) {
+            const inputEl = document.getElementById('delInput_' + sheetRowIndex);
+            if (!inputEl) return;
+            const typed = inputEl.value; // NOT trimmed — must be exactly "X"
+            if (typed !== 'X') {
+                inputEl.style.borderColor = '#c62828';
+                inputEl.style.background = '#ffebee';
+                inputEl.placeholder = 'Must be X';
+                inputEl.value = '';
+                return;
+            }
+
+            showDocStatus('Deleting…', 'info');
+            const spreadsheetId = storageGet('fuelTracker_spreadsheetId');
+
+            try {
+                // Get the sheetId for "Documents"
+                const meta = await gapi.client.sheets.spreadsheets.get({ spreadsheetId: spreadsheetId });
+                let docSheetId = null;
+                for (const s of meta.result.sheets) {
+                    if (s.properties.title === 'Documents') {
+                        docSheetId = s.properties.sheetId;
+                        break;
+                    }
+                }
+                if (docSheetId === null) throw new Error('Cannot find "Documents" worksheet.');
+
+                // Delete the row (sheetRowIndex is 1-based; API uses 0-based startIndex)
+                await gapi.client.sheets.spreadsheets.batchUpdate({
+                    spreadsheetId: spreadsheetId,
+                    resource: {
+                        requests: [{
+                            deleteDimension: {
+                                range: {
+                                    sheetId: docSheetId,
+                                    dimension: 'ROWS',
+                                    startIndex: sheetRowIndex - 1,
+                                    endIndex:   sheetRowIndex
+                                }
+                            }
+                        }]
+                    }
+                });
+
+                showDocStatus('✅  Document deleted.', 'success');
+                await loadDocuments();
+                setTimeout(function() { showDocStatus('', ''); }, 2500);
+
+            } catch (err) {
+                console.error('Delete error:', err);
+                showDocStatus('Error deleting document: ' + (err.message || err), 'error');
+            }
+        }
+
         // Toggle inline view of an image or link for a PDF
         function toggleDocView(fileId, buttonElement, isPdf) {
             const container = buttonElement.parentElement.nextElementSibling;
 
-            if (container.children.length > 0) {
-                // Already open — close it
+            if (container && container.classList.contains('doc-view-container') && container.children.length > 0) {
                 container.innerHTML = '';
                 buttonElement.textContent = '📎  View';
                 return;
             }
 
             if (isPdf) {
-                // For PDFs open Drive inline viewer link (Safari can render it)
                 const link = document.createElement('a');
                 link.href = 'https://drive.google.com/file/d/' + fileId + '/view';
                 link.target = '_blank';
                 link.textContent = '📄  Open PDF in Drive';
                 link.style.cssText = 'display:block; margin-top:8px; color:#1565c0; font-size:13px; text-decoration:underline;';
-                container.appendChild(link);
+                if (container) container.appendChild(link);
                 buttonElement.textContent = '📎  Hide';
             } else {
-                // Image: show thumbnail inline
                 const img = document.createElement('img');
                 img.className = 'receipt-image show';
                 img.src = 'https://drive.google.com/thumbnail?id=' + fileId + '&sz=w800';
@@ -3128,17 +3281,19 @@
                 img.onerror = function() {
                     img.src = 'https://drive.google.com/uc?export=view&id=' + fileId;
                     img.onerror = function() {
-                        img.alt = 'Could not load image.';
-                        const link = document.createElement('a');
-                        link.href = 'https://drive.google.com/file/d/' + fileId + '/view';
-                        link.target = '_blank';
-                        link.textContent = '📂  Open in Google Drive';
-                        link.style.cssText = 'display:block; margin-top:8px; color:#1565c0; font-size:13px;';
-                        container.appendChild(link);
+                        // Final fallback: just provide a Drive link
+                        if (container) {
+                            const link = document.createElement('a');
+                            link.href = 'https://drive.google.com/file/d/' + fileId + '/view';
+                            link.target = '_blank';
+                            link.textContent = '📂  Open in Google Drive';
+                            link.style.cssText = 'display:block; margin-top:8px; color:#1565c0; font-size:13px; text-decoration:underline;';
+                            container.appendChild(link);
+                        }
                     };
                 };
 
-                container.appendChild(img);
+                if (container) container.appendChild(img);
                 buttonElement.textContent = '📎  Hide';
             }
         }
