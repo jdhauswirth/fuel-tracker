@@ -626,11 +626,11 @@
                     </div>
 
                     <div class="form-group">
-                        <label for="ocNextService">Mileage Next Service</label>
-                        <input type="text" id="ocNextService" placeholder="e.g. 3,500" required
+                        <label for="ocNextService">Odometer at Next Service</label>
+                        <input type="text" id="ocNextService" placeholder="e.g. 73,500" required
                                inputmode="numeric" autocomplete="off"
                                oninput="formatOcNextService(this)">
-                        <div class="info-text">Must be greater than current odometer</div>
+                        <div class="info-text" id="ocNextServiceHint">Enter the odometer reading at which the next service is due</div>
                     </div>
 
                     <button type="submit" id="ocSubmitBtn">🔧  Log Oil Change</button>
@@ -904,21 +904,25 @@
                         const klValues = klResponse.result.values;
                         let mileageNextService = null;
 
-                        if (klValues) {
-                            // Scan from the bottom; prefer col L (index 1), fall back to col K (index 0)
+                        if (klValues && lastOdometer) {
+                            // "Mileage Next Service" is stored as an ABSOLUTE odometer target,
+                            // so it must be greater than the current odometer reading.
+                            // Scan from the bottom; prefer col L (new layout), fall back to col K (legacy).
+                            // Reject any value <= lastOdometer — those are interval values (e.g. 3,500),
+                            // not absolute targets, and would produce a negative result.
                             for (let i = klValues.length - 1; i >= 0; i--) {
                                 const row = klValues[i] || [];
                                 // Try L first (new layout)
                                 const lVal = row[1];
                                 const lNum = parseFloat(String(lVal || '').replace(/,/g, ''));
-                                if (lVal && String(lVal).trim() !== '' && !isNaN(lNum) && lNum > 0) {
+                                if (lVal && String(lVal).trim() !== '' && !isNaN(lNum) && lNum > lastOdometer) {
                                     mileageNextService = lNum;
                                     break;
                                 }
-                                // Fall back to K (old layout — only if the cell looks like a mileage number, not text)
+                                // Fall back to K (legacy layout)
                                 const kVal = row[0];
                                 const kNum = parseFloat(String(kVal || '').replace(/,/g, ''));
-                                if (kVal && String(kVal).trim() !== '' && !isNaN(kNum) && kNum > 0) {
+                                if (kVal && String(kVal).trim() !== '' && !isNaN(kNum) && kNum > lastOdometer) {
                                     mileageNextService = kNum;
                                     break;
                                 }
@@ -2386,8 +2390,15 @@
                     'Last recorded odometer: ' + lastOdometer.toLocaleString() + ' mi';
             }
 
-            // Default next service
-            document.getElementById('ocNextService').value = '3,500';
+            // Default next service = current odometer + 3,500 mile interval (absolute target)
+            const defaultNextService = lastOdometer
+                ? Math.round(lastOdometer + 3500)
+                : 3500;
+            document.getElementById('ocNextService').value = defaultNextService.toLocaleString();
+            document.getElementById('ocNextServiceHint').textContent =
+                lastOdometer
+                    ? 'Target odometer for next service (current + 3,500 mi interval)'
+                    : 'Enter the odometer reading at which the next service is due';
 
             showOcStatus('', '');
         }
