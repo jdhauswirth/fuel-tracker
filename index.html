@@ -63,34 +63,43 @@
         }
         
         .tabs {
-            display: flex;
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
             background: #f5f5f5;
             border-bottom: 2px solid #e0e0e0;
         }
-        
+
+        /* Row separator between the two tab rows */
+        .tab-row-divider {
+            grid-column: 1 / -1;
+            height: 1px;
+            background: #d0d0d0;
+            margin: 0;
+        }
+
         .tab {
-            flex: 1;
-            padding: 15px;
+            padding: 11px 6px;
             text-align: center;
             background: #f5f5f5;
             border: none;
             cursor: pointer;
-            font-size: 14px;
+            font-size: 12px;
             font-weight: 600;
             color: #666;
             transition: all 0.3s;
+            white-space: nowrap;
         }
-        
+
         .tab.active {
             background: white;
             color: #2E7D32;
             border-bottom: 3px solid #2E7D32;
         }
-        
+
         .tab:hover {
             background: #e8e8e8;
         }
-        
+
         .tab.active:hover {
             background: white;
         }
@@ -425,11 +434,16 @@
         
         <div id="appContent">
             <div class="tabs">
-                <button class="tab active" onclick="showTab('log', event)">📝  Log Fuel</button>
-                <button class="tab" onclick="showTab('history', event)">📊  History</button>
-                <button class="tab" onclick="showTab('summary', event)">📈  Summary</button>
-                <button class="tab" onclick="showTab('trends', event)">📈  Price Trends</button>
-                <button class="tab" onclick="showTab('oilChange', event)">🔧  Oil Change</button>
+                <!-- Row 1 -->
+                <button class="tab active" onclick="showTab('log', event)">📝 Log Fuel</button>
+                <button class="tab" onclick="showTab('history', event)">📊 History</button>
+                <button class="tab" onclick="showTab('summary', event)">📈 Summary</button>
+                <!-- Divider between rows -->
+                <div class="tab-row-divider"></div>
+                <!-- Row 2 -->
+                <button class="tab" onclick="showTab('trends', event)">📈 Price Trends</button>
+                <button class="tab" onclick="showTab('oilChange', event)">🔧 Oil Change</button>
+                <button class="tab" onclick="showTab('documents', event)">📁 Documents</button>
             </div>
             
             <div id="logTab" class="tab-content active">
@@ -645,6 +659,53 @@
             </div>
             <!-- ===== END OIL CHANGE LOG TAB ===== -->
 
+            <!-- ===== DOCUMENTS TAB ===== -->
+            <div id="documentsTab" class="tab-content">
+                <div id="docStatus" class="status info" style="display:none;"></div>
+
+                <!-- Upload a new document -->
+                <form id="docForm">
+                    <div class="form-group">
+                        <label for="docDate">Date</label>
+                        <input type="date" id="docDate" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="docType">Type</label>
+                        <select id="docType" required>
+                            <option value="">— Loading types… —</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="docName">Name / Description</label>
+                        <input type="text" id="docName" placeholder="e.g. Registration 2025, Recall Notice…" maxlength="200" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="docFile">📎  File (photo or PDF)</label>
+                        <input type="file" id="docFile" accept="image/*,application/pdf" style="padding: 8px;" required>
+                        <p class="info-text">Accepted: photos (JPG/PNG) or PDF files</p>
+                        <div id="docFilePreview"></div>
+                    </div>
+
+                    <button type="submit" id="docSubmitBtn">📁  Save Document</button>
+                </form>
+
+                <!-- Divider -->
+                <hr style="margin: 28px 0; border: none; border-top: 1px solid #e0e0e0;">
+
+                <!-- Browse existing documents -->
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
+                    <strong style="font-size: 15px; color: #333;">Saved Documents</strong>
+                    <button onclick="loadDocuments()" style="width: auto; padding: 8px 14px; font-size: 13px;">🔄 Refresh</button>
+                </div>
+                <div id="docList">
+                    <p style="text-align:center; color:#999; font-size:14px;">Tap Refresh to load saved documents</p>
+                </div>
+            </div>
+            <!-- ===== END DOCUMENTS TAB ===== -->
+
         </div>
     </div>
 
@@ -661,6 +722,10 @@
         let ocDriveFolder = null;
         // Known folder ID for "Oil Change Receipts" (pre-created by user)
         const OC_RECEIPT_FOLDER_ID = '1pqRZB1beNLKtdrU1vSwAu7JSzFcjqQ6p';
+
+        let docDriveFolder = null;
+        // Known folder ID for "2018 Subaru Outback Documents"
+        const DOC_FOLDER_ID = '1UsLKg3xxn992QDQpgE0ls0kF87rzlqjr';
         let priceTrendChart = null;
         let allPriceData = [];
         let currentChartData = [];
@@ -742,6 +807,8 @@
                 }, 100);
             } else if (tabName === 'oilChange' && accessToken) {
                 initOilChangeTab();
+            } else if (tabName === 'documents' && accessToken) {
+                initDocumentsTab();
             } else if (!accessToken && tabName !== 'summary') {
                 console.log('No accessToken, not calling load function for tab:', tabName);
             }
@@ -2770,6 +2837,390 @@
             } catch (err) {
                 console.error('Oil change save error:', err);
                 showOcStatus('Error: ' + (err.message || err), 'error');
+            } finally {
+                submitBtn.disabled = false;
+            }
+        });
+
+        // =============================================
+        //  DOCUMENTS TAB
+        // =============================================
+
+        function showDocStatus(msg, type) {
+            const el = document.getElementById('docStatus');
+            el.textContent = msg;
+            el.className = 'status' + (type ? ' ' + type : '');
+            el.style.display = msg ? 'block' : 'none';
+        }
+
+        // Fetch the Type drop-down options from Documents!I3:I9
+        async function loadDocTypes() {
+            const spreadsheetId = storageGet('fuelTracker_spreadsheetId');
+            if (!spreadsheetId || !accessToken) return;
+            try {
+                const resp = await gapi.client.sheets.spreadsheets.values.get({
+                    spreadsheetId: spreadsheetId,
+                    range: 'Documents!I3:I9'
+                });
+                const rows = resp.result.values || [];
+                const select = document.getElementById('docType');
+                select.innerHTML = '<option value="">— Select type —</option>';
+                rows.forEach(function(row) {
+                    if (row[0] && String(row[0]).trim()) {
+                        const opt = document.createElement('option');
+                        opt.value = String(row[0]).trim();
+                        opt.textContent = String(row[0]).trim();
+                        select.appendChild(opt);
+                    }
+                });
+            } catch (e) {
+                console.warn('Could not load document types:', e);
+                document.getElementById('docType').innerHTML =
+                    '<option value="">— Type unavailable —</option>';
+            }
+        }
+
+        function initDocumentsTab() {
+            // Set today's date
+            const today = new Date();
+            const yyyy = today.getFullYear();
+            const mm   = String(today.getMonth() + 1).padStart(2, '0');
+            const dd   = String(today.getDate()).padStart(2, '0');
+            document.getElementById('docDate').value = yyyy + '-' + mm + '-' + dd;
+
+            loadDocTypes();
+            loadDocuments();
+            showDocStatus('', '');
+        }
+
+        // Drive: get or verify the "2018 Subaru Outback Documents" folder
+        async function getOrCreateDocDriveFolder() {
+            if (docDriveFolder) return docDriveFolder;
+
+            // Try known pre-created folder first
+            try {
+                const check = await gapi.client.request({
+                    path: '/drive/v3/files/' + DOC_FOLDER_ID,
+                    method: 'GET',
+                    params: { fields: 'id, name, trashed' }
+                });
+                if (check.result && !check.result.trashed) {
+                    docDriveFolder = DOC_FOLDER_ID;
+                    console.log('Using known Documents folder:', docDriveFolder);
+                    return docDriveFolder;
+                }
+            } catch (e) {
+                console.warn('Known Documents folder check failed, searching by name:', e);
+            }
+
+            // Fall back: search by name
+            try {
+                const response = await gapi.client.request({
+                    path: '/drive/v3/files',
+                    method: 'GET',
+                    params: {
+                        q: "name='2018 Subaru Outback Documents' and mimeType='application/vnd.google-apps.folder' and trashed=false",
+                        fields: 'files(id, name)'
+                    }
+                });
+                if (response.result.files && response.result.files.length > 0) {
+                    docDriveFolder = response.result.files[0].id;
+                    console.log('Found Documents folder by name:', docDriveFolder);
+                    return docDriveFolder;
+                }
+
+                // Create if not found
+                const createResponse = await gapi.client.request({
+                    path: '/drive/v3/files',
+                    method: 'POST',
+                    body: {
+                        name: '2018 Subaru Outback Documents',
+                        mimeType: 'application/vnd.google-apps.folder'
+                    }
+                });
+                docDriveFolder = createResponse.result.id;
+                console.log('Created Documents folder:', docDriveFolder);
+                return docDriveFolder;
+            } catch (error) {
+                console.error('Error with Documents Drive folder:', error);
+                throw error;
+            }
+        }
+
+        // Upload a document (image or PDF) to Drive, return fileId
+        async function uploadDocToDrive(file, docDate, docName) {
+            if (!file) return null;
+            try {
+                const folderId = await getOrCreateDocDriveFolder();
+                const timestamp = new Date().getTime();
+                const ext = file.name.split('.').pop() || 'bin';
+                const safeName = docName.replace(/[^a-zA-Z0-9_-]/g, '_');
+                const fileName = 'Doc_' + docDate + '_' + safeName + '_' + timestamp + '.' + ext;
+
+                const metadata = {
+                    name: fileName,
+                    mimeType: file.type,
+                    parents: [folderId]
+                };
+
+                const formData = new FormData();
+                formData.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
+                formData.append('file', file);
+
+                const response = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id', {
+                    method: 'POST',
+                    headers: { 'Authorization': 'Bearer ' + accessToken },
+                    body: formData
+                });
+
+                const result = await response.json();
+                const fileId = result.id;
+                console.log('Document uploaded to Drive:', fileId);
+
+                // Make public (anyone with link)
+                try {
+                    await gapi.client.request({
+                        path: '/drive/v3/files/' + fileId + '/permissions',
+                        method: 'POST',
+                        body: { role: 'reader', type: 'anyone' }
+                    });
+                } catch (permErr) {
+                    console.error('Error setting doc permissions:', permErr);
+                    showDocStatus('Warning: File uploaded but may not be viewable', 'error');
+                }
+
+                return fileId;
+            } catch (error) {
+                console.error('Error uploading document:', error);
+                throw error;
+            }
+        }
+
+        // Write a row to the "Documents" sheet (A=Date, B=Type, C=Name, D=fileId)
+        async function writeDocToSheet(data) {
+            const spreadsheetId = storageGet('fuelTracker_spreadsheetId');
+            const DOC_SHEET = 'Documents';
+
+            // Find next empty row (count column A)
+            const colAResp = await gapi.client.sheets.spreadsheets.values.get({
+                spreadsheetId: spreadsheetId,
+                range: DOC_SHEET + '!A:A'
+            });
+            const aValues = colAResp.result.values || [];
+            const nextRow = aValues.length + 1;
+
+            await gapi.client.sheets.spreadsheets.values.batchUpdate({
+                spreadsheetId: spreadsheetId,
+                resource: {
+                    valueInputOption: 'USER_ENTERED',
+                    data: [
+                        { range: DOC_SHEET + '!A' + nextRow, values: [[data.date]] },
+                        { range: DOC_SHEET + '!B' + nextRow, values: [[data.type]] },
+                        { range: DOC_SHEET + '!C' + nextRow, values: [[data.name]] },
+                        { range: DOC_SHEET + '!D' + nextRow, values: [[data.fileId]] }
+                    ]
+                }
+            });
+        }
+
+        // Load and display existing documents from the sheet
+        async function loadDocuments() {
+            const spreadsheetId = storageGet('fuelTracker_spreadsheetId');
+            if (!spreadsheetId || !accessToken) {
+                document.getElementById('docList').innerHTML =
+                    '<p style="text-align:center; color:#999;">Sign in to view saved documents</p>';
+                return;
+            }
+            const listEl = document.getElementById('docList');
+            listEl.innerHTML = '<p style="text-align:center; color:#999;">Loading…</p>';
+
+            try {
+                const resp = await gapi.client.sheets.spreadsheets.values.get({
+                    spreadsheetId: spreadsheetId,
+                    range: 'Documents!A:D'
+                });
+                const rows = resp.result.values || [];
+
+                // Skip header row (row 1) and any rows without a date
+                const dataRows = rows.slice(1).filter(function(r) {
+                    return r && r[0] && String(r[0]).trim();
+                });
+
+                if (dataRows.length === 0) {
+                    listEl.innerHTML = '<p style="text-align:center; color:#999; font-size:14px;">No documents saved yet</p>';
+                    return;
+                }
+
+                // Show newest first
+                const reversed = dataRows.slice().reverse();
+                let html = '';
+                reversed.forEach(function(row) {
+                    const date   = row[0] || '';
+                    const type   = row[1] || '';
+                    const name   = row[2] || '';
+                    const fileId = row[3] || '';
+
+                    const isPdf = fileId && name.toLowerCase().endsWith('.pdf');
+                    const icon  = isPdf ? '📄' : '🖼️';
+
+                    html += '<div class="history-item" style="border-left-color: #1565c0;">';
+                    html += '<div class="history-item-date">' + icon + '  ' + date + '</div>';
+                    html += '<div class="history-item-detail"><strong>' + escapeHtml(name) + '</strong></div>';
+                    if (type) {
+                        html += '<div class="history-item-detail" style="color:#888;">Type: ' + escapeHtml(type) + '</div>';
+                    }
+                    if (fileId) {
+                        html += '<div style="margin-top:6px;">';
+                        html += '<button class="receipt-btn" style="background:#1565c0;" ' +
+                                'onclick="toggleDocView(\'' + fileId + '\', this, ' + (isPdf ? 'true' : 'false') + ')">📎  View</button>';
+                        html += '<a href="https://drive.google.com/file/d/' + fileId + '/view" target="_blank" ' +
+                                'style="margin-left:10px; font-size:12px; color:#1565c0;">Open in Drive ↗</a>';
+                        html += '</div>';
+                        html += '<div class="doc-view-container"></div>';
+                    }
+                    html += '</div>';
+                });
+
+                listEl.innerHTML = html;
+
+            } catch (err) {
+                console.error('Error loading documents:', err);
+                listEl.innerHTML = '<p style="color:#c62828; font-size:14px;">Error loading documents: ' + (err.message || err) + '</p>';
+            }
+        }
+
+        // Escape HTML for safe injection
+        function escapeHtml(str) {
+            return String(str)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;');
+        }
+
+        // Toggle inline view of an image or link for a PDF
+        function toggleDocView(fileId, buttonElement, isPdf) {
+            const container = buttonElement.parentElement.nextElementSibling;
+
+            if (container.children.length > 0) {
+                // Already open — close it
+                container.innerHTML = '';
+                buttonElement.textContent = '📎  View';
+                return;
+            }
+
+            if (isPdf) {
+                // For PDFs open Drive inline viewer link (Safari can render it)
+                const link = document.createElement('a');
+                link.href = 'https://drive.google.com/file/d/' + fileId + '/view';
+                link.target = '_blank';
+                link.textContent = '📄  Open PDF in Drive';
+                link.style.cssText = 'display:block; margin-top:8px; color:#1565c0; font-size:13px; text-decoration:underline;';
+                container.appendChild(link);
+                buttonElement.textContent = '📎  Hide';
+            } else {
+                // Image: show thumbnail inline
+                const img = document.createElement('img');
+                img.className = 'receipt-image show';
+                img.src = 'https://drive.google.com/thumbnail?id=' + fileId + '&sz=w800';
+                img.alt = 'Document';
+
+                img.onerror = function() {
+                    img.src = 'https://drive.google.com/uc?export=view&id=' + fileId;
+                    img.onerror = function() {
+                        img.alt = 'Could not load image.';
+                        const link = document.createElement('a');
+                        link.href = 'https://drive.google.com/file/d/' + fileId + '/view';
+                        link.target = '_blank';
+                        link.textContent = '📂  Open in Google Drive';
+                        link.style.cssText = 'display:block; margin-top:8px; color:#1565c0; font-size:13px;';
+                        container.appendChild(link);
+                    };
+                };
+
+                container.appendChild(img);
+                buttonElement.textContent = '📎  Hide';
+            }
+        }
+
+        // Wire up Documents file input preview (image only; PDFs show filename)
+        document.addEventListener('DOMContentLoaded', function() {
+            const docFileEl = document.getElementById('docFile');
+            if (docFileEl) {
+                docFileEl.addEventListener('change', function(e) {
+                    const file = e.target.files[0];
+                    const preview = document.getElementById('docFilePreview');
+                    if (!file) { preview.innerHTML = ''; return; }
+
+                    if (file.type.startsWith('image/')) {
+                        const reader = new FileReader();
+                        reader.onload = function(ev) {
+                            const img = document.createElement('img');
+                            img.src = ev.target.result;
+                            img.alt = 'Preview';
+                            img.style.cssText = 'max-width:100%; max-height:200px; border-radius:8px; margin-top:10px; box-shadow:0 2px 8px rgba(0,0,0,0.1);';
+                            preview.innerHTML = '';
+                            preview.appendChild(img);
+                        };
+                        reader.readAsDataURL(file);
+                    } else {
+                        // PDF — just show filename
+                        preview.innerHTML = '<div style="margin-top:8px; padding:10px; background:#e3f2fd; border-radius:6px; font-size:13px; color:#1565c0;">📄  ' + escapeHtml(file.name) + '</div>';
+                    }
+                });
+            }
+        });
+
+        // Documents form submit
+        document.getElementById('docForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+
+            const submitBtn = document.getElementById('docSubmitBtn');
+            submitBtn.disabled = true;
+            showDocStatus('Saving document…', 'info');
+
+            try {
+                const dateVal = document.getElementById('docDate').value;
+                if (!dateVal) throw new Error('Please enter a date.');
+
+                const typeVal = document.getElementById('docType').value;
+                if (!typeVal) throw new Error('Please select a document type.');
+
+                const nameVal = document.getElementById('docName').value.trim();
+                if (!nameVal) throw new Error('Please enter a name or description.');
+
+                const file = document.getElementById('docFile').files[0];
+                if (!file) throw new Error('Please select a file to upload.');
+
+                showDocStatus('Uploading file…', 'info');
+                const fileId = await uploadDocToDrive(file, dateVal, nameVal);
+                if (!fileId) throw new Error('Upload returned no file ID.');
+
+                showDocStatus('Writing to sheet…', 'info');
+                await writeDocToSheet({
+                    date:   dateVal,
+                    type:   typeVal,
+                    name:   nameVal,
+                    fileId: fileId
+                });
+
+                showDocStatus('✅  Document saved successfully!', 'success');
+
+                // Reset form
+                document.getElementById('docForm').reset();
+                document.getElementById('docFilePreview').innerHTML = '';
+
+                // Re-init date and reload type list
+                initDocumentsTab();
+
+                // Refresh the doc list
+                await loadDocuments();
+
+                setTimeout(function() { showDocStatus('Ready to add another', 'info'); }, 3000);
+
+            } catch (err) {
+                console.error('Document save error:', err);
+                showDocStatus('Error: ' + (err.message || err), 'error');
             } finally {
                 submitBtn.disabled = false;
             }
