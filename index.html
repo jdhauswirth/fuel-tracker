@@ -2109,6 +2109,9 @@
                 document.getElementById('location').value = 'COSTCO SOS';
                 document.getElementById('odometer').value = '';
                 document.getElementById('odometerValue').value = '';
+
+                // Refresh the last fill summary to reflect the just-saved entry
+                await loadLastOdometer();
                 
                 setTimeout(function() {
                     showStatus('Ready for next entry', 'info');
