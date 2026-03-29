@@ -264,18 +264,53 @@
             border-radius: 8px;
             border-left: 4px solid #2E7D32;
         }
-        
+
         .history-item-date {
             font-weight: bold;
             color: #2E7D32;
             margin-bottom: 5px;
         }
-        
+
         .history-item-detail {
             font-size: 13px;
             color: #555;
             margin: 3px 0;
         }
+
+        /* Year-section grouping (fuel history) */
+        .year-section {
+            margin-bottom: 10px;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        .year-header {
+            background: linear-gradient(135deg, #2E7D32 0%, #1B5E20 100%);
+            color: white;
+            padding: 12px 16px;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-weight: 600;
+            font-size: 15px;
+            user-select: none;
+        }
+
+        .year-header.collapsed { opacity: 0.85; }
+
+        .year-header .expand-icon {
+            font-size: 13px;
+            transition: transform 0.2s;
+        }
+
+        .year-content {
+            display: none;
+            padding: 10px 0 2px 0;
+            background: white;
+        }
+
+        .year-content.expanded { display: block; }
         
         .upload-area {
             border: 2px dashed #2E7D32;
@@ -698,7 +733,7 @@
                 <!-- Browse existing documents -->
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
                     <strong style="font-size: 15px; color: #333;">Saved Documents</strong>
-                    <button onclick="loadDocuments()" style="width: auto; padding: 8px 14px; font-size: 13px;">🔄 Refresh</button>
+                    <button onclick="loadDocuments(false)" style="width: auto; padding: 8px 14px; font-size: 13px;">🔄 Refresh</button>
                 </div>
                 <div id="docList">
                     <p style="text-align:center; color:#999; font-size:14px;">Tap Refresh to load saved documents</p>
@@ -1123,60 +1158,153 @@
             }
         }
         
+        function getYearFromDate(dateStr) {
+            if (!dateStr) return 'Unknown';
+            const s = String(dateStr).trim();
+            // Try MM/DD/YYYY or M/D/YYYY
+            const m1 = s.match(/\d{1,2}\/\d{1,2}\/(\d{4})/);
+            if (m1) return m1[1];
+            // Try YYYY-MM-DD
+            const m2 = s.match(/^(\d{4})-\d{2}-\d{2}/);
+            if (m2) return m2[1];
+            // Try last 4-digit group
+            const m3 = s.match(/(\d{4})/);
+            if (m3) return m3[1];
+            return 'Unknown';
+        }
+
+        function createHistoryItem(row) {
+            const gallons = parseFloat(row[4]) || 0;
+            const pricePerGal = parseFloat(String(row[6]).replace(/[$,]/g, '')) || 0;
+            const totalCost = (gallons * pricePerGal).toFixed(2);
+            const receiptFileId = row[14] ? extractDriveFileId(row[14]) : null;
+
+            const item = document.createElement('div');
+            item.className = 'history-item';
+            const costLine = row[4] + ' gallons @ ' + row[6] + '/gal = $' + totalCost;
+
+            let htmlContent = '';
+            htmlContent += '<div class="history-item-date">' + row[0] + '</div>';
+            htmlContent += '<div class="history-item-detail">🚗  Odometer: ' + row[1] + ' miles</div>';
+            htmlContent += '<div class="history-item-detail">📏  Miles/Fill: ' + row[2] + ' miles</div>';
+            htmlContent += '<div class="history-item-detail">⛽ ' + costLine + '</div>';
+            htmlContent += '<div class="history-item-detail">📊  MPG: ' + row[5] + '</div>';
+            htmlContent += '<div class="history-item-detail">📍  ' + row[7] + '</div>';
+            if (row[8]) {
+                htmlContent += '<div class="history-item-detail" style="font-size: 11px; color: #999;">🕐  Recorded: ' + row[8] + '</div>';
+            }
+            if (receiptFileId) {
+                htmlContent += '<button class="receipt-btn" onclick="toggleReceiptImage(\'' + receiptFileId + '\', this)">📷  View Receipt</button>';
+            }
+            item.innerHTML = htmlContent;
+            return item;
+        }
+
+        function toggleYearSection(year) {
+            const content = document.getElementById('year-content-' + year);
+            const header = document.getElementById('year-header-' + year);
+            if (!content || !header) return;
+            const icon = header.querySelector('.expand-icon');
+            if (content.classList.contains('expanded')) {
+                content.classList.remove('expanded');
+                header.classList.add('collapsed');
+                if (icon) icon.textContent = '▶';
+            } else {
+                content.classList.add('expanded');
+                header.classList.remove('collapsed');
+                if (icon) icon.textContent = '▼';
+            }
+        }
+
         async function loadHistory() {
             showStatus('Loading history...', 'info');
             try {
                 const spreadsheetId = storageGet('fuelTracker_spreadsheetId');
                 const sheetName = storageGet('fuelTracker_sheetName');
-                
+
                 const response = await gapi.client.sheets.spreadsheets.values.get({
                     spreadsheetId: spreadsheetId,
                     range: sheetName + '!B:P',
                 });
-                
+
                 const values = response.result.values;
-                
+
                 const dataRows = values ? values.filter(function(row) {
-                    return row && 
-                        row.length >= 2 && 
+                    return row &&
+                        row.length >= 2 &&
                         row[0] && String(row[0]).trim() !== '' &&
                         row[1] && String(row[1]).trim() !== '';
                 }) : [];
-                
+
                 const historyList = document.getElementById('historyList');
                 historyList.innerHTML = '';
-                
+
                 if (dataRows && dataRows.length > 1) {
+                    // Build newest-first array (skip header row at index 0)
+                    const allEntries = [];
                     for (let i = dataRows.length - 1; i >= 1; i--) {
-                        const row = dataRows[i];
-                        const gallons = parseFloat(row[4]) || 0;
-                        const pricePerGal = parseFloat(String(row[6]).replace(/[$,]/g, '')) || 0;
-                        const totalCost = (gallons * pricePerGal).toFixed(2);
-                        const receiptFileId = row[14] || null;
-                        
-                        const item = document.createElement('div');
-                        item.className = 'history-item';
-                        const costLine = row[4] + ' gallons @ ' + row[6] + '/gal = $' + totalCost;
-                        
-                        let htmlContent = '';
-                        htmlContent += '<div class="history-item-date">' + row[0] + '</div>';
-                        htmlContent += '<div class="history-item-detail">🚗  Odometer: ' + row[1] + ' miles</div>';
-                        htmlContent += '<div class="history-item-detail">📏  Miles/Fill: ' + row[2] + ' miles</div>';
-                        htmlContent += '<div class="history-item-detail">⛽ ' + costLine + '</div>';
-                        htmlContent += '<div class="history-item-detail">📊  MPG: ' + row[5] + '</div>';
-                        htmlContent += '<div class="history-item-detail">📍  ' + row[7] + '</div>';
-                        
-                        if (row[8]) {
-                            htmlContent += '<div class="history-item-detail" style="font-size: 11px; color: #999;">🕐  Recorded: ' + row[8] + '</div>';
-                        }
-                        
-                        if (receiptFileId) {
-                            htmlContent += '<button class="receipt-btn" onclick="toggleReceiptImage(\'' + receiptFileId + '\', this)">📷  View Receipt</button>';
-                        }
-                        
-                        item.innerHTML = htmlContent;
-                        historyList.appendChild(item);
+                        allEntries.push(dataRows[i]);
                     }
+
+                    const RECENT_COUNT = 5;
+                    const recentEntries = allEntries.slice(0, RECENT_COUNT);
+                    const olderEntries = allEntries.slice(RECENT_COUNT);
+
+                    // --- Recent Entries section (always expanded) ---
+                    const recentSection = document.createElement('div');
+                    recentSection.className = 'year-section';
+
+                    const recentHeader = document.createElement('div');
+                    recentHeader.className = 'year-header';
+                    recentHeader.innerHTML = '<span>📅 Recent Entries (' + recentEntries.length + ')</span>';
+                    recentSection.appendChild(recentHeader);
+
+                    const recentContent = document.createElement('div');
+                    recentContent.className = 'year-content expanded';
+                    recentEntries.forEach(function(row) {
+                        recentContent.appendChild(createHistoryItem(row));
+                    });
+                    recentSection.appendChild(recentContent);
+                    historyList.appendChild(recentSection);
+
+                    // --- Older entries grouped by year (collapsed) ---
+                    if (olderEntries.length > 0) {
+                        const yearMap = {};
+                        const yearOrder = [];
+                        olderEntries.forEach(function(row) {
+                            const yr = getYearFromDate(row[0]);
+                            if (!yearMap[yr]) {
+                                yearMap[yr] = [];
+                                yearOrder.push(yr);
+                            }
+                            yearMap[yr].push(row);
+                        });
+
+                        yearOrder.forEach(function(yr) {
+                            const rows = yearMap[yr];
+                            const section = document.createElement('div');
+                            section.className = 'year-section';
+
+                            const header = document.createElement('div');
+                            header.className = 'year-header collapsed';
+                            header.id = 'year-header-' + yr;
+                            header.setAttribute('onclick', 'toggleYearSection("' + yr + '")');
+                            header.innerHTML =
+                                '<span>📁 ' + yr + ' (' + rows.length + ' fill-up' + (rows.length !== 1 ? 's' : '') + ')</span>' +
+                                '<span class="expand-icon">▶</span>';
+                            section.appendChild(header);
+
+                            const content = document.createElement('div');
+                            content.className = 'year-content';
+                            content.id = 'year-content-' + yr;
+                            rows.forEach(function(row) {
+                                content.appendChild(createHistoryItem(row));
+                            });
+                            section.appendChild(content);
+                            historyList.appendChild(section);
+                        });
+                    }
+
                     showStatus('History loaded!', 'success');
                 } else {
                     historyList.innerHTML = '<p style="text-align: center; color: #999;">No fuel stops found</p>';
@@ -2889,7 +3017,7 @@
             document.getElementById('docDate').value = yyyy + '-' + mm + '-' + dd;
 
             loadDocTypes();
-            loadDocuments();
+            loadDocuments(false);
             showDocStatus('', '');
         }
 
@@ -3069,7 +3197,73 @@
             return s;
         }
 
-        async function loadDocuments() {
+        // ── Build a single document card (shared by collapsed and expanded views) ──
+        function buildDocCard(entry) {
+            const row         = entry.row;
+            const sheetRowIdx = entry.sheetRowIndex;
+            const date        = row[0] || '';
+            const type        = row[1] || '';
+            const name        = row[2] || '';
+            const rawD        = row[3] || '';
+            const dateAdded   = row[4] || '';
+            const fileId      = extractDriveFileId(rawD);
+            const isPdf       = guessIsPdf(rawD, name);
+            const icon        = isPdf ? '📄' : '🖼️';
+            const safeId      = escapeHtml(fileId);
+            const safeRow     = String(sheetRowIdx);
+
+            let h = '<div class="history-item" style="border-left-color:#1565c0;" id="docRow_' + safeRow + '">';
+            h += '<div class="history-item-date">' + icon + '  ' + escapeHtml(date) + '</div>';
+            h += '<div class="history-item-detail"><strong>' + escapeHtml(name) + '</strong></div>';
+            if (type) {
+                h += '<div class="history-item-detail" style="color:#888;">Type: ' + escapeHtml(type) + '</div>';
+            }
+            if (dateAdded) {
+                h += '<div class="history-item-detail" style="color:#bbb; font-size:11px;">Added: ' + escapeHtml(dateAdded) + '</div>';
+            }
+
+            if (fileId) {
+                // ── Action buttons row ──
+                h += '<div style="margin-top:8px; display:flex; flex-wrap:wrap; gap:6px; align-items:center;">';
+
+                // 📎 View inline
+                h += '<button class="receipt-btn" style="background:#1565c0;" ' +
+                     'onclick="toggleDocView(\'' + safeId + '\', this, ' + (isPdf ? 'true' : 'false') + ')">📎 View</button>';
+
+                // 📱 Open Doc — direct download so iOS hands off to native app
+                h += '<a href="https://drive.google.com/uc?export=download&id=' + safeId + '" target="_blank" ' +
+                     'style="display:inline-block; padding:6px 10px; background:#00897b; color:#fff; ' +
+                     'border-radius:6px; font-size:12px; font-weight:600; text-decoration:none;">📱 Open Doc</a>';
+
+                // Open in Drive (web)
+                h += '<a href="https://drive.google.com/file/d/' + safeId + '/view" target="_blank" ' +
+                     'style="font-size:12px; color:#1565c0; text-decoration:none;">↗ Drive</a>';
+
+                h += '</div>';
+                h += '<div class="doc-view-container"></div>';
+            }
+
+            // Delete button + inline "X" confirmation
+            h += '<div style="margin-top:6px;" id="delArea_' + safeRow + '">';
+            h += '<button onclick="showDeleteConfirm(' + safeRow + ')" ' +
+                 'style="width:auto; padding:4px 10px; font-size:11px; background:#e53935; color:#fff; ' +
+                 'border:none; border-radius:5px; cursor:pointer;">🗑️ Delete</button>';
+            h += '</div>';
+
+            h += '</div>'; // end history-item
+            return h;
+        }
+
+        // ── Extract year (4-digit string) from a date value ──
+        function yearFromDate(d) {
+            const s = parseDateForSort(d);
+            const m = String(s).match(/^(\d{4})/);
+            return m ? m[1] : 'Other';
+        }
+
+        const DOC_RECENT_LIMIT = 3;
+
+        async function loadDocuments(showAll) {
             const spreadsheetId = storageGet('fuelTracker_spreadsheetId');
             if (!spreadsheetId || !accessToken) {
                 document.getElementById('docList').innerHTML =
@@ -3080,19 +3274,18 @@
             listEl.innerHTML = '<p style="text-align:center; color:#999;">Loading…</p>';
 
             try {
-                // Read A:E (cols A–E, including new "Date Doc Added" col E)
                 const resp = await gapi.client.sheets.spreadsheets.values.get({
                     spreadsheetId: spreadsheetId,
                     range: 'Documents!A:E'
                 });
                 const rows = resp.result.values || [];
 
-                // Keep header-skipped rows that have a date; track original 1-based sheet row
+                // Skip header; track original 1-based sheet row number
                 const dataRows = [];
                 for (let i = 1; i < rows.length; i++) {
                     const r = rows[i];
                     if (r && r[0] && String(r[0]).trim()) {
-                        dataRows.push({ row: r, sheetRowIndex: i + 1 }); // +1 because sheet is 1-indexed
+                        dataRows.push({ row: r, sheetRowIndex: i + 1 });
                     }
                 }
 
@@ -3108,51 +3301,65 @@
                     return db > da ? 1 : db < da ? -1 : 0;
                 });
 
+                const total = dataRows.length;
                 let html = '';
-                dataRows.forEach(function(entry) {
-                    const row          = entry.row;
-                    const sheetRowIdx  = entry.sheetRowIndex;
-                    const date         = row[0] || '';
-                    const type         = row[1] || '';
-                    const name         = row[2] || '';
-                    const rawD         = row[3] || '';
-                    const dateAdded    = row[4] || '';
-                    const fileId       = extractDriveFileId(rawD);
-                    const isPdf        = guessIsPdf(rawD, name);
-                    const icon         = isPdf ? '📄' : '🖼️';
-                    const safeId       = escapeHtml(fileId);
-                    const safeRow      = String(sheetRowIdx);
 
-                    html += '<div class="history-item" style="border-left-color: #1565c0;" id="docRow_' + safeRow + '">';
-                    html += '<div class="history-item-date">' + icon + '  ' + escapeHtml(date) + '</div>';
-                    html += '<div class="history-item-detail"><strong>' + escapeHtml(name) + '</strong></div>';
-                    if (type) {
-                        html += '<div class="history-item-detail" style="color:#888;">Type: ' + escapeHtml(type) + '</div>';
-                    }
-                    if (dateAdded) {
-                        html += '<div class="history-item-detail" style="color:#aaa; font-size:12px;">Added: ' + escapeHtml(dateAdded) + '</div>';
+                if (!showAll) {
+                    // ── Collapsed view: 3 most recent ──────────────────────────
+                    dataRows.slice(0, DOC_RECENT_LIMIT).forEach(function(entry) {
+                        html += buildDocCard(entry);
+                    });
+
+                    if (total > DOC_RECENT_LIMIT) {
+                        html += '<div style="text-align:center; margin-top:16px;">' +
+                                '<button onclick="loadDocuments(true)" ' +
+                                'style="width:auto; padding:11px 22px; background:#1565c0; color:#fff; ' +
+                                'border:none; border-radius:8px; font-size:14px; font-weight:600; cursor:pointer;">' +
+                                '📂  View All ' + total + ' Documents</button>' +
+                                '</div>';
                     }
 
-                    // View + Open in Drive
-                    if (fileId) {
-                        html += '<div style="margin-top:6px;">';
-                        html += '<button class="receipt-btn" style="background:#1565c0;" ' +
-                                'onclick="toggleDocView(\'' + safeId + '\', this, ' + (isPdf ? 'true' : 'false') + ')">📎  View</button>';
-                        html += '<a href="https://drive.google.com/file/d/' + safeId + '/view" target="_blank" ' +
-                                'style="margin-left:10px; font-size:12px; color:#1565c0;">Open in Drive ↗</a>';
+                } else {
+                    // ── Expanded view: all entries grouped by year ─────────────
+                    // Group
+                    const byYear = {};
+                    dataRows.forEach(function(entry) {
+                        const yr = yearFromDate(entry.row[0]);
+                        if (!byYear[yr]) byYear[yr] = [];
+                        byYear[yr].push(entry);
+                    });
+
+                    // Years descending
+                    Object.keys(byYear).sort().reverse().forEach(function(yr) {
+                        const entries = byYear[yr];
+                        const count   = entries.length;
+                        // ── Year folder header (tap to collapse/expand) ──
+                        html += '<div id="yrHdr_' + yr + '" ' +
+                                'onclick="toggleDocYearSection(\'' + yr + '\')" ' +
+                                'style="display:flex; justify-content:space-between; align-items:center; ' +
+                                'margin-bottom:8px; padding:10px 14px; background:#e3f2fd; ' +
+                                'border-radius:8px; cursor:pointer; user-select:none;">' +
+                                '<span style="font-weight:700; color:#1565c0; font-size:14px;">' +
+                                '📁 ' + yr + '</span>' +
+                                '<span style="color:#666; font-size:13px;">' + count +
+                                ' doc' + (count !== 1 ? 's' : '') + ' ▾</span>' +
+                                '</div>';
+                        // ── Year section content ──
+                        html += '<div id="yrSec_' + yr + '">';
+                        entries.forEach(function(entry) {
+                            html += buildDocCard(entry);
+                        });
                         html += '</div>';
-                        html += '<div class="doc-view-container"></div>';
-                    }
+                    });
 
-                    // Delete button + inline "X" confirmation
-                    html += '<div style="margin-top:8px;" id="delArea_' + safeRow + '">';
-                    html += '<button onclick="showDeleteConfirm(' + safeRow + ')" ' +
-                            'style="width:auto; padding:5px 12px; font-size:12px; background:#e53935; color:#fff; ' +
-                            'border:none; border-radius:6px; cursor:pointer;">🗑️ Delete</button>';
-                    html += '</div>';
-
-                    html += '</div>'; // end history-item
-                });
+                    // Show less
+                    html += '<div style="text-align:center; margin-top:14px;">' +
+                            '<button onclick="loadDocuments(false)" ' +
+                            'style="width:auto; padding:8px 18px; background:#666; color:#fff; ' +
+                            'border:none; border-radius:8px; font-size:13px; cursor:pointer;">' +
+                            '▲ Show Recent Only</button>' +
+                            '</div>';
+                }
 
                 listEl.innerHTML = html;
 
@@ -3160,6 +3367,18 @@
                 console.error('Error loading documents:', err);
                 listEl.innerHTML = '<p style="color:#c62828; font-size:14px;">Error loading documents: ' + (err.message || err) + '</p>';
             }
+        }
+
+        // Toggle a year section open/closed (Documents tab)
+        function toggleDocYearSection(yr) {
+            const sec = document.getElementById('yrSec_' + yr);
+            const hdr = document.getElementById('yrHdr_' + yr);
+            if (!sec || !hdr) return;
+            const isHidden = sec.style.display === 'none';
+            sec.style.display = isHidden ? 'block' : 'none';
+            // Swap the chevron
+            hdr.querySelector('span:last-child').textContent =
+                hdr.querySelector('span:last-child').textContent.replace(isHidden ? '▸' : '▾', isHidden ? '▾' : '▸');
         }
 
         // Escape HTML for safe injection
