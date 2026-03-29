@@ -713,16 +713,6 @@
                 return;
             }
             
-            /try {
-            /    storageSet('fuelTracker_clientId', clientId);
-            /    storageSet('fuelTracker_apiKey', apiKey);
-            /    storageSet('fuelTracker_spreadsheetId', spreadsheetId);
-            /    storageSet('fuelTracker_sheetName', sheetName);
-            /} catch(e) {
-            /    // localStorage blocked (iOS "Block All Cookies" setting) — continue anyway
-            /    console.warn('localStorage unavailable:', e);
-            /}
-            / replace above with below
             storageSet('fuelTracker_clientId', clientId);
             storageSet('fuelTracker_apiKey', apiKey);
             storageSet('fuelTracker_spreadsheetId', spreadsheetId);
