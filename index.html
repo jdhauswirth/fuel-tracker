@@ -1194,39 +1194,53 @@
                         showStatus('Last fill-up loaded successfully', 'success');
                     }
 
-                    // Fetch Mileage Next Service from Oil Changes sheet
-                    // Col L = new entries (K=Notes, L=Mileage Next Service)
-                    // Col K = legacy entries (older rows wrote Mileage Next Service to K)
+                    // Fetch Mileage Next Service from Oil Changes sheet.
+                    // Strategy: read cols B:L (odometer through next-service).
+                    // 1) Prefer col L (index 9 in B:L) — absolute next-service odometer written by this app.
+                    // 2) Fall back to any column A–L that contains a value > lastOdometer but < lastOdometer+15000.
+                    // 3) Last resort: lastOCOdometer (col B, index 0) + 3,500 mi default interval.
                     try {
-                        // Fetch both columns at once: K and L
-                        const klResponse = await gapi.client.sheets.spreadsheets.values.get({
+                        const ocFullResp = await gapi.client.sheets.spreadsheets.values.get({
                             spreadsheetId: spreadsheetId,
-                            range: 'Oil Changes!K:L',
+                            range: 'Oil Changes!B:L',
                         });
-                        const klValues = klResponse.result.values;
+                        const ocRows = ocFullResp.result.values || [];
                         let mileageNextService = null;
+                        let lastOCOdometer = null;
 
-                        if (klValues && lastOdometer) {
-                            // "Mileage Next Service" is stored as an ABSOLUTE odometer target,
-                            // so it must be greater than the current odometer reading.
-                            // Scan from the bottom; prefer col L (new layout), fall back to col K (legacy).
-                            // Reject any value <= lastOdometer — those are interval values (e.g. 3,500),
-                            // not absolute targets, and would produce a negative result.
-                            for (let i = klValues.length - 1; i >= 0; i--) {
-                                const row = klValues[i] || [];
-                                // Try L first (new layout)
-                                const lVal = row[1];
-                                const lNum = parseFloat(String(lVal || '').replace(/,/g, ''));
-                                if (lVal && String(lVal).trim() !== '' && !isNaN(lNum) && lNum > lastOdometer) {
-                                    mileageNextService = lNum;
-                                    break;
+                        if (ocRows.length && lastOdometer) {
+                            // Scan from the bottom to find the most recent oil change row.
+                            for (let i = ocRows.length - 1; i >= 0; i--) {
+                                const row = ocRows[i] || [];
+                                // col B = index 0: odometer for this oil change
+                                const bNum = parseFloat(String(row[0] || '').replace(/,/g, ''));
+                                if (!isNaN(bNum) && bNum > 0) {
+                                    // col L = index 10 (B=0,C=1,D=2,E=3,F=4,G=5,H=6,I=7,J=8,K=9,L=10)
+                                    const lVal = row[10];
+                                    const lNum = parseFloat(String(lVal || '').replace(/,/g, ''));
+                                    if (lVal && !isNaN(lNum) && lNum > lastOdometer && lNum < lastOdometer + 15000) {
+                                        mileageNextService = lNum;
+                                        break;
+                                    }
+                                    // Try any other numeric column in this row that looks like an absolute target
+                                    for (let c = 1; c < row.length; c++) {
+                                        const cNum = parseFloat(String(row[c] || '').replace(/,/g, ''));
+                                        if (!isNaN(cNum) && cNum > lastOdometer && cNum < lastOdometer + 15000) {
+                                            mileageNextService = cNum;
+                                            break;
+                                        }
+                                    }
+                                    if (mileageNextService !== null) break;
+                                    // Record the last valid OC odometer as fallback
+                                    if (lastOCOdometer === null) lastOCOdometer = bNum;
+                                    break; // Only need the most recent row
                                 }
-                                // Fall back to K (legacy layout)
-                                const kVal = row[0];
-                                const kNum = parseFloat(String(kVal || '').replace(/,/g, ''));
-                                if (kVal && String(kVal).trim() !== '' && !isNaN(kNum) && kNum > lastOdometer) {
-                                    mileageNextService = kNum;
-                                    break;
+                            }
+                            // Fallback: estimate next service from last OC odometer + 3,500
+                            if (mileageNextService === null && lastOCOdometer !== null) {
+                                const estimated = lastOCOdometer + 3500;
+                                if (estimated > lastOdometer) {
+                                    mileageNextService = estimated;
                                 }
                             }
                         }
