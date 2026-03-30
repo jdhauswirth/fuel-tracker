@@ -622,7 +622,7 @@
             <h1>⛽ Fuel, Mileage & Maintenance Tracker</h1>
             <div class="header-bottom">
             <div class="header-text">
-                <p class="vehicle-info">2018 Subaru Outback 2.5L Limited &nbsp;·&nbsp; VIN: -0616</p>
+                <p class="vehicle-info">2018 Subaru Outback 2.5L LTD &nbsp;·&nbsp; VIN -0616</p>
                 <div id="headerStats" class="header-stats" style="display:none;"></div>
             </div>
             <div class="header-car-col">
@@ -1481,8 +1481,8 @@
                 function getVal(i) { return (vals[i] && vals[i][0] != null) ? String(vals[i][0]) : '—'; }
 
                 const owned      = getVal(0);   // T3  e.g. "1.5 years"
-                const totalMiles = getVal(1);   // T4  e.g. "71,087"
-                const ownerMiles = getVal(2);   // T5  e.g. "11,023"
+                const totalMiles = getVal(2);   // T5  e.g. "71,087"
+                const ownerMiles = getVal(3);   // T6  e.g. "11,023"
                 const avgMpg     = getVal(8);   // T11 e.g. "26.0"
                 const rawPpg     = getVal(12);  // T15 e.g. "3.320"
 
@@ -1494,7 +1494,7 @@
                 if (el) {
                     el.innerHTML =
                         '<span class="stat-row"><span class="stat-label">Vehicle owned for:</span> ' + owned + '</span>' +
-                        '<span class="stat-row"><span class="stat-label">As owner miles driven:</span> ' + ownerMiles + ' / ' + totalMiles + '</span>' +
+                        '<span class="stat-row"><span class="stat-label">As owner miles driven:</span> ' + ownerMiles + ' of ' + totalMiles + '</span>' +
                         '<span class="stat-row"><span class="stat-label">Average MPG:</span> ' + avgMpg + '</span>' +
                         '<span class="stat-row"><span class="stat-label">Average $/Gal:</span> ' + avgPpg + '</span>';
                     el.style.display = 'block';
