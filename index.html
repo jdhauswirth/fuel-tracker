@@ -110,6 +110,19 @@
             font-size: 13px;
             font-weight: normal;
         }
+        .header-stats {
+            margin-top: 8px;
+            font-size: 12px;
+            color: #555;
+            line-height: 1.75;
+        }
+        .header-stats .stat-row {
+            display: block;
+        }
+        .header-stats .stat-label {
+            font-weight: 600;
+            color: #444;
+        }
         
         .subtitle {
             color: #666;
@@ -609,8 +622,8 @@
             <h1>⛽ Fuel, Mileage & Maintenance Tracker</h1>
             <div class="header-bottom">
             <div class="header-text">
-                <p class="vehicle-info">2018 Subaru Outback 2.5L Limited</p>
-                <p class="vehicle-info">VIN: ending -0616</p>
+                <p class="vehicle-info">2018 Subaru Outback 2.5L Limited &nbsp;·&nbsp; VIN: -0616</p>
+                <div id="headerStats" class="header-stats" style="display:none;"></div>
             </div>
             <div class="header-car-col">
             <div class="header-car-wrap" onclick="viewCarPhoto()" title="Tap to view full size">
@@ -1155,8 +1168,9 @@
                 }
 
                 await loadLastOdometer();
+                loadHeaderStats(); // non-critical, fire-and-forget
             };
-            
+
             if (accessToken === null) {
                 tokenClient.requestAccessToken({prompt: 'consent'});
             } else {
@@ -1451,6 +1465,42 @@
                 content.classList.add('expanded');
                 header.classList.remove('collapsed');
                 if (icon) icon.textContent = '▼';
+            }
+        }
+
+        async function loadHeaderStats() {
+            const spreadsheetId = storageGet('fuelTracker_spreadsheetId');
+            if (!spreadsheetId || !accessToken) return;
+            try {
+                const resp = await gapi.client.sheets.spreadsheets.values.get({
+                    spreadsheetId: spreadsheetId,
+                    range: 'Mileage & Refueling!T3:T15',
+                });
+                const vals = resp.result.values || [];
+                // vals is an array of single-element rows: vals[0][0]=T3, vals[1][0]=T4, etc.
+                function getVal(i) { return (vals[i] && vals[i][0] != null) ? String(vals[i][0]) : '—'; }
+
+                const owned      = getVal(0);   // T3  e.g. "1.5 years"
+                const totalMiles = getVal(1);   // T4  e.g. "71,087"
+                const ownerMiles = getVal(2);   // T5  e.g. "11,023"
+                const avgMpg     = getVal(8);   // T11 e.g. "26.0"
+                const rawPpg     = getVal(12);  // T15 e.g. "3.320"
+
+                // Format $/gal: strip any existing $ or commas, round to 2 decimals
+                const ppgNum = parseFloat(String(rawPpg).replace(/[$,]/g, ''));
+                const avgPpg = isNaN(ppgNum) ? rawPpg : '$' + ppgNum.toFixed(2);
+
+                const el = document.getElementById('headerStats');
+                if (el) {
+                    el.innerHTML =
+                        '<span class="stat-row"><span class="stat-label">Vehicle owned for:</span> ' + owned + '</span>' +
+                        '<span class="stat-row"><span class="stat-label">As owner miles driven:</span> ' + ownerMiles + ' / ' + totalMiles + '</span>' +
+                        '<span class="stat-row"><span class="stat-label">Average MPG:</span> ' + avgMpg + '</span>' +
+                        '<span class="stat-row"><span class="stat-label">Average $/Gal:</span> ' + avgPpg + '</span>';
+                    el.style.display = 'block';
+                }
+            } catch (err) {
+                console.warn('loadHeaderStats error:', err);
             }
         }
 
