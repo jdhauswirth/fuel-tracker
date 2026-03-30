@@ -39,7 +39,15 @@
         .header {
             padding: 20px 30px 10px;
             display: flex;
-            align-items: center;
+            flex-direction: column;
+            gap: 6px;
+        }
+        .header h1 {
+            width: 100%;
+        }
+        .header-bottom {
+            display: flex;
+            align-items: flex-start;
             justify-content: space-between;
             gap: 12px;
         }
@@ -598,9 +606,10 @@
 <body>
     <div class="container">
         <div class="header">
+            <h1>⛽ Fuel, Mileage & Maintenance Tracker</h1>
+            <div class="header-bottom">
             <div class="header-text">
-                <h1>⛽ Mileage & Fuel Tracker:</h1>
-                <p class="vehicle-info">Joel H. - 2018 Subaru Outback 2.5L Limited</p>
+                <p class="vehicle-info">2018 Subaru Outback 2.5L Limited</p>
                 <p class="vehicle-info">VIN: ending -0616</p>
             </div>
             <div class="header-car-col">
@@ -611,6 +620,7 @@
                 ✏️ Change Photo
                 <input type="file" id="carPhotoInput" accept="image/*" class="change-photo-input">
             </label>
+            </div>
             </div>
         </div>
 
