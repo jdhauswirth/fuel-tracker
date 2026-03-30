@@ -3082,17 +3082,23 @@
                     return;
                 }
 
-                // Sort newest first, then group by year
-                ocRows.sort(function(a, b) {
-                    return String(b[0] || '').localeCompare(String(a[0] || ''));
-                });
-
+                // Group by year (preserve sheet order within each year for now)
                 const yearMap = {};
                 const yearOrder = [];
                 ocRows.forEach(function(row) {
                     const yr = getYearFromDate(row[0]) || 'Unknown';
                     if (!yearMap[yr]) { yearMap[yr] = []; yearOrder.push(yr); }
                     yearMap[yr].push(row);
+                });
+
+                // Sort years descending (newest year first)
+                yearOrder.sort(function(a, b) { return parseInt(b) - parseInt(a); });
+
+                // Within each year, sort rows newest-first using proper date parsing
+                yearOrder.forEach(function(yr) {
+                    yearMap[yr].sort(function(a, b) {
+                        return new Date(b[0] || 0) - new Date(a[0] || 0);
+                    });
                 });
 
                 const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
