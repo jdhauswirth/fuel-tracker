@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fuel Tracker — Privacy Cleanup</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+            background: linear-gradient(135deg, #2E7D32 0%, #1B5E20 100%);
+            min-height: 100vh; padding: 20px;
+        }
+        .card {
+            max-width: 560px; margin: 0 auto; background: #fff;
+            border-radius: 16px; padding: 24px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+        }
+        h1 { font-size: 20px; margin-bottom: 6px; }
+        p.sub { color: #666; font-size: 13px; margin-bottom: 16px; line-height: 1.5; }
+        label { display: block; font-size: 12px; font-weight: 600; color: #555; margin: 10px 0 4px; }
+        input[type=text] {
+            width: 100%; padding: 10px; border: 1px solid #ccc;
+            border-radius: 8px; font-size: 13px;
+        }
+        button {
+            padding: 12px 18px; border: none; border-radius: 8px;
+            font-size: 14px; font-weight: 600; cursor: pointer; margin: 14px 8px 0 0;
+        }
+        #dryBtn  { background: #1565c0; color: #fff; }
+        #fixBtn  { background: #c62828; color: #fff; }
+        button:disabled { opacity: 0.45; cursor: not-allowed; }
+        #log {
+            margin-top: 18px; background: #111; color: #b9f6ca;
+            font-family: ui-monospace, Menlo, monospace; font-size: 12px;
+            border-radius: 8px; padding: 12px; height: 320px;
+            overflow-y: auto; white-space: pre-wrap; word-break: break-word;
+        }
+        .warn { color: #ffcc80; } .err { color: #ff8a80; } .ok { color: #b9f6ca; }
+        .head { color: #80d8ff; font-weight: 700; }
+    </style>
+</head>
+<body>
+<div class="card">
+    <h1>🔒 Fuel Tracker — Privacy Cleanup</h1>
+    <p class="sub">
+        One-time tool. It signs into the same app identity as Fuel Tracker
+        (<code>drive.file</code> scope — it can <strong>only</strong> see files the
+        Fuel Tracker app created), scans every one of those files, and removes any
+        "anyone with the link" sharing. Run <strong>Dry Run</strong> first to see
+        what would change, then <strong>Remove Public Sharing</strong>.
+        Delete this file from your repo when you're done.
+    </p>
+
+    <label for="clientId">OAuth Client ID (auto-filled from Fuel Tracker settings if present)</label>
+    <input type="text" id="clientId" placeholder="xxxxxxxx.apps.googleusercontent.com">
+
+    <div>
+        <button id="dryBtn"  onclick="run(true)">🔍 Dry Run</button>
+        <button id="fixBtn"  onclick="run(false)">🧹 Remove Public Sharing</button>
+    </div>
+
+    <div id="log">Ready.</div>
+</div>
+
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<script>
+    var SCOPE = 'https://www.googleapis.com/auth/drive.file';
+    var accessToken = null;
+    var running = false;
+
+    // Reuse the Client ID the main app already saved
+    try {
+        var saved = localStorage.getItem('fuelTracker_clientId');
+        if (saved) document.getElementById('clientId').value = saved;
+    } catch (e) {}
+
+    function log(msg, cls) {
+        var el = document.getElementById('log');
+        var line = document.createElement('div');
+        if (cls) line.className = cls;
+        line.textContent = msg;
+        el.appendChild(line);
+        el.scrollTop = el.scrollHeight;
+    }
+    function setBusy(busy) {
+        running = busy;
+        document.getElementById('dryBtn').disabled = busy;
+        document.getElementById('fixBtn').disabled = busy;
+    }
+
+    function signIn() {
+        return new Promise(function(resolve, reject) {
+            var clientId = document.getElementById('clientId').value.trim();
+            if (!clientId) { reject(new Error('Enter your OAuth Client ID first.')); return; }
+            if (typeof google === 'undefined' || !google.accounts) {
+                reject(new Error('Google Identity script not loaded yet — wait a second and retry.'));
+                return;
+            }
+            var tc = google.accounts.oauth2.initTokenClient({
+                client_id: clientId,
+                scope: SCOPE,
+                callback: function(resp) {
+                    if (resp.error !== undefined) { reject(new Error('Auth failed: ' + resp.error)); return; }
+                    accessToken = resp.access_token;
+                    resolve();
+                }
+            });
+            tc.requestAccessToken({ prompt: '' });
+        });
+    }
+
+    function api(path, opts) {
+        opts = opts || {};
+        opts.headers = Object.assign({ 'Authorization': 'Bearer ' + accessToken }, opts.headers || {});
+        return fetch('https://www.googleapis.com/drive/v3' + path, opts).then(function(r) {
+            if (r.status === 204) return null;                 // successful DELETE
+            return r.json().then(function(j) {
+                if (!r.ok) {
+                    var m = (j && j.error && j.error.message) || ('HTTP ' + r.status);
+                    throw new Error(m);
+                }
+                return j;
+            });
+        });
+    }
+
+    // List every file this app identity can see (drive.file = app-created only),
+    // including each file's permissions so we can spot public sharing.
+    async function listAllFiles() {
+        var files = [];
+        var pageToken = null;
+        do {
+            var qs = '?q=' + encodeURIComponent('trashed=false') +
+                     '&pageSize=100' +
+                     '&fields=' + encodeURIComponent('nextPageToken, files(id, name, mimeType, permissions(id, type, role))') +
+                     (pageToken ? '&pageToken=' + encodeURIComponent(pageToken) : '');
+            var page = await api('/files' + qs);
+            files = files.concat(page.files || []);
+            pageToken = page.nextPageToken;
+            log('  ...found ' + files.length + ' file(s) so far');
+        } while (pageToken);
+        return files;
+    }
+
+    async function run(dryRun) {
+        if (running) return;
+        setBusy(true);
+        document.getElementById('log').textContent = '';
+        try {
+            log(dryRun ? '=== DRY RUN — nothing will be changed ===' : '=== LIVE RUN — removing public sharing ===', 'head');
+            log('Signing in...');
+            await signIn();
+            log('Signed in. Listing app-created files...', 'ok');
+
+            var files = await listAllFiles();
+            log('Total files visible to the app: ' + files.length, 'head');
+
+            var publicFiles = [];
+            for (var i = 0; i < files.length; i++) {
+                var f = files[i];
+                var anyonePerms = (f.permissions || []).filter(function(p) { return p.type === 'anyone'; });
+                if (anyonePerms.length) publicFiles.push({ file: f, perms: anyonePerms });
+            }
+
+            log(publicFiles.length + ' file(s) are publicly shared:', publicFiles.length ? 'warn' : 'ok');
+
+            var fixed = 0, failed = 0;
+            for (var j = 0; j < publicFiles.length; j++) {
+                var entry = publicFiles[j];
+                var label = '[' + (j + 1) + '/' + publicFiles.length + '] ' + entry.file.name;
+                if (dryRun) {
+                    log('  WOULD FIX  ' + label, 'warn');
+                    continue;
+                }
+                try {
+                    for (var k = 0; k < entry.perms.length; k++) {
+                        await api('/files/' + entry.file.id + '/permissions/' + entry.perms[k].id,
+                                  { method: 'DELETE' });
+                    }
+                    fixed++;
+                    log('  ✅ FIXED   ' + label, 'ok');
+                } catch (err) {
+                    failed++;
+                    log('  ❌ FAILED  ' + label + ' — ' + err.message, 'err');
+                }
+                // Gentle pacing to stay well under Drive API rate limits
+                await new Promise(function(res) { setTimeout(res, 120); });
+            }
+
+            log('', null);
+            if (dryRun) {
+                log('Dry run complete. ' + publicFiles.length + ' file(s) would be made private.', 'head');
+                log('Click "Remove Public Sharing" to apply.', 'head');
+            } else {
+                log('Done. Made private: ' + fixed + '   Failed: ' + failed, 'head');
+                if (failed) log('Re-run to retry failures (already-fixed files are skipped automatically).', 'warn');
+                log('You can now delete cleanup.html from your repo.', 'head');
+            }
+        } catch (err) {
+            log('ERROR: ' + err.message, 'err');
+        }
+        setBusy(false);
+    }
+</script>
+</body>
+</html>
