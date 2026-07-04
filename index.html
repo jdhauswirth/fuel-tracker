@@ -139,16 +139,18 @@
         }
         .header h1 { width: 100%; }
         .header-bottom {
+            /* Stacked layout: vehicle info line on top, car photo below it,
+               everything left-aligned. */
             display: flex;
+            flex-direction: column;
             align-items: flex-start;
-            justify-content: space-between;
-            gap: 12px;
+            gap: 8px;
         }
         .header-text { flex: 1; min-width: 0; }
         .header-car-col {
             display: flex;
             flex-direction: column;
-            align-items: flex-end;
+            align-items: flex-start;
             flex-shrink: 0;
         }
         .header-car-wrap {
@@ -177,7 +179,7 @@
             position: relative;
             overflow: hidden;
             padding: 2px 0;
-            text-align: right;
+            text-align: left;
             touch-action: manipulation;
             -webkit-user-select: none;
             user-select: none;
@@ -206,7 +208,7 @@
             font-size: 12px;
             font-weight: 600;
             letter-spacing: 0.02em;
-            margin-bottom: 8px;
+            margin-bottom: 0;
         }
 
         /* ── Signature: pump-LCD readout for owner stats ───────────── */
