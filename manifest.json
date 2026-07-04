@@ -1,0 +1,25 @@
+{
+  "name": "Fuel Tracker",
+  "short_name": "Fuel",
+  "description": "Log fuel stops, oil changes, and vehicle documents",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#1B5E20",
+  "theme_color": "#2E7D32",
+  "icons": [
+    {
+      "src": "FuelLogPumpGreen.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "FuelLogPumpGreen.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
