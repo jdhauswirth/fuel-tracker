@@ -46,8 +46,23 @@
             --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
         }
 
+        /* ─────────────────────────────────────────────────────────────
+           DARK THEME TOKENS — you normally never edit this section.
+           The theme is controlled by the THEME_MODE constant near the
+           top of the JavaScript further down this file (search for
+           "THEME MODE SWITCH"). These two rules make that switch work:
+
+           Rule 1: system is in Dark Mode AND the app has NOT been
+                   forced to light → dark tokens apply (the 'auto' case).
+           Rule 2: the app has been forced to dark via THEME_MODE='dark'
+                   → dark tokens apply regardless of the system setting.
+
+           If neither rule matches, the light tokens in :root above win.
+           The two rules must contain IDENTICAL token lists — if you ever
+           tweak a dark color, change it in BOTH places.
+           ───────────────────────────────────────────────────────────── */
         @media (prefers-color-scheme: dark) {
-            :root {
+            :root:not([data-theme="light"]) {
                 --bg-a: #060F09;
                 --bg-b: #0B1D10;
                 --surface: #151B15;
@@ -66,6 +81,25 @@
                 --card-shadow: 0 12px 32px rgba(0, 0, 0, 0.55);
                 --focus-ring: 0 0 0 3px rgba(82, 210, 115, 0.30);
             }
+        }
+        :root[data-theme="dark"] {
+                --bg-a: #060F09;
+                --bg-b: #0B1D10;
+                --surface: #151B15;
+                --surface-2: #1D251D;
+                --ink: #E7ECE2;
+                --ink-muted: #97A492;
+                --line: #2A342A;
+                --accent: #27913F;
+                --accent-press: #1E7A34;
+                --accent-ink: #52D273;
+                --danger: #EF5350;
+                --warn: #FFA040;
+                --readout-bg: #0A130C;
+                --readout-digit: #7CF29C;
+                --readout-label: #5F8A6C;
+                --card-shadow: 0 12px 32px rgba(0, 0, 0, 0.55);
+                --focus-ring: 0 0 0 3px rgba(82, 210, 115, 0.30);
         }
 
         * {
@@ -242,8 +276,9 @@
             box-shadow: 0 1px 4px rgba(0,0,0,0.18);
         }
         @media (prefers-color-scheme: dark) {
-            .tab:hover { background: rgba(255,255,255,0.05); }
+            :root:not([data-theme="light"]) .tab:hover { background: rgba(255,255,255,0.05); }
         }
+        :root[data-theme="dark"] .tab:hover { background: rgba(255,255,255,0.05); }
 
         .tab-content { display: none; padding: 22px 20px 26px; }
         .tab-content.active { display: block; }
@@ -1020,6 +1055,49 @@
             
         
         const DISCOVERY_DOC = 'https://sheets.googleapis.com/$discovery/rest?version=v4';
+        // ╔══════════════════════════════════════════════════════════════════╗
+        // ║  THEME MODE SWITCH — light / dark / follow-the-device             ║
+        // ║                                                                    ║
+        // ║  Exactly ONE of the three THEME_MODE lines below must be active   ║
+        // ║  (no // in front of it). The other two must be commented out      ║
+        // ║  (start with //).                                                  ║
+        // ║                                                                    ║
+        // ║  'auto'  → app follows your iPhone/computer Light/Dark setting.   ║
+        // ║            If your phone switches to Dark Mode at sunset, the     ║
+        // ║            app switches with it. (This is the shipped default.)   ║
+        // ║  'light' → app is ALWAYS light, ignoring the device setting.      ║
+        // ║  'dark'  → app is ALWAYS dark, ignoring the device setting.       ║
+        // ║                                                                    ║
+        // ║  HOW TO CHANGE MODES (example: force light mode):                 ║
+        // ║    1. Put // in front of:   const THEME_MODE = 'auto';            ║
+        // ║    2. Remove the // from:   // const THEME_MODE = 'light';        ║
+        // ║    3. Save, commit index.html to GitHub.                          ║
+        // ║    4. Bump CACHE_VERSION in sw.js (e.g. 'fuel-tracker-v3' →       ║
+        // ║       'fuel-tracker-v4') and commit that too, so your phone       ║
+        // ║       actually downloads the change instead of using its cache.   ║
+        // ║                                                                    ║
+        // ║  Everything else is automatic: the CSS, the price-trend chart,    ║
+        // ║  and the iPhone status-bar color all read this one constant.      ║
+        // ╚══════════════════════════════════════════════════════════════════╝
+        const THEME_MODE = 'auto';      // ← ACTIVE: follow the device setting
+        // const THEME_MODE = 'light';  // ← uncomment to force LIGHT mode
+        // const THEME_MODE = 'dark';   // ← uncomment to force DARK mode
+
+        // Applies THEME_MODE. Sets data-theme on <html> (which the CSS reads)
+        // and syncs the browser-chrome/status-bar color when a mode is forced.
+        (function applyThemeMode() {
+            if (THEME_MODE === 'light' || THEME_MODE === 'dark') {
+                document.documentElement.setAttribute('data-theme', THEME_MODE);
+                var forcedColor = THEME_MODE === 'dark' ? '#060F09' : '#123B1F';
+                document.querySelectorAll('meta[name="theme-color"]').forEach(function(m) {
+                    m.setAttribute('content', forcedColor);
+                    m.removeAttribute('media');
+                });
+            } else {
+                document.documentElement.removeAttribute('data-theme');
+            }
+        })();
+
         const SCOPES = 'https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/drive.file';
 
         // ══════════════════════════════════════════════════════════════════
@@ -1239,7 +1317,9 @@
         (function() {
             function applyChartTheme() {
                 if (typeof Chart === 'undefined') return;
-                var dark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+                var dark = THEME_MODE === 'dark' ||
+                           (THEME_MODE === 'auto' && window.matchMedia &&
+                            window.matchMedia('(prefers-color-scheme: dark)').matches);
                 Chart.defaults.color = dark ? '#97A492' : '#66735F';
                 Chart.defaults.borderColor = dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)';
             }
