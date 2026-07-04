@@ -2,13 +2,15 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="Fuel Tracker">
     <meta name="mobile-web-app-capable" content="yes">
     <link rel="apple-touch-icon" href="https://jdhauswirth.github.io/fuel-tracker/FuelLogPumpGreen.png">
     <link rel="shortcut icon" type="image/png" href="https://jdhauswirth.github.io/fuel-tracker/FuelLogPumpGreen.png">
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#2E7D32">
     <!-- Chart.js Library -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     
@@ -1000,6 +1002,217 @@
         
         const DISCOVERY_DOC = 'https://sheets.googleapis.com/$discovery/rest?version=v4';
         const SCOPES = 'https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/drive.file';
+
+        // ══════════════════════════════════════════════════════════════════
+        //  TOKEN LIFECYCLE — GIS access tokens expire after ~1 hour.
+        //  ensureValidToken() silently refreshes before expiry so writes and
+        //  uploads made long after sign-in no longer fail with 401s.
+        // ══════════════════════════════════════════════════════════════════
+        let tokenExpiresAt = 0;
+
+        function markTokenFresh(resp) {
+            accessToken = resp.access_token;
+            // Refresh 2 minutes early to avoid using a token at the edge of expiry
+            tokenExpiresAt = Date.now() + (((resp.expires_in || 3600) - 120) * 1000);
+            if (typeof gapi !== 'undefined' && gapi.client) {
+                gapi.client.setToken({ access_token: accessToken });
+            }
+        }
+
+        async function ensureValidToken() {
+            if (accessToken && Date.now() < tokenExpiresAt) return;
+            if (!tokenClient) throw new Error('Not signed in');
+            await new Promise(function(resolve, reject) {
+                const prevCallback = tokenClient.callback;
+                tokenClient.callback = function(resp) {
+                    tokenClient.callback = prevCallback;
+                    if (resp.error !== undefined) {
+                        reject(new Error('Token refresh failed: ' + resp.error));
+                        return;
+                    }
+                    markTokenFresh(resp);
+                    resolve();
+                };
+                // prompt:'' = silent refresh against the existing Google session
+                tokenClient.requestAccessToken({ prompt: '' });
+            });
+        }
+
+        // Swallow-variant for read-only loads: if silent refresh fails we still
+        // attempt the API call, whose own error handling will surface the issue.
+        async function ensureValidTokenQuiet() {
+            try { await ensureValidToken(); }
+            catch (e) { console.warn('Silent token refresh failed:', e); }
+        }
+
+        // ══════════════════════════════════════════════════════════════════
+        //  PRIVATE DRIVE FILE VIEWING — uploads are NO LONGER shared as
+        //  "anyone with the link". Files stay private; we fetch the bytes
+        //  with the user's OAuth token and display them via a blob: URL.
+        // ══════════════════════════════════════════════════════════════════
+        const driveBlobCache = {};
+
+        async function fetchDriveBlobUrl(fileId) {
+            if (driveBlobCache[fileId]) return driveBlobCache[fileId];
+            await ensureValidToken();
+            const resp = await fetch('https://www.googleapis.com/drive/v3/files/' +
+                encodeURIComponent(fileId) + '?alt=media', {
+                headers: { 'Authorization': 'Bearer ' + accessToken }
+            });
+            if (!resp.ok) throw new Error('Drive fetch failed: HTTP ' + resp.status);
+            const blob = await resp.blob();
+            const url = URL.createObjectURL(blob);
+            driveBlobCache[fileId] = url;
+            return url;
+        }
+
+        // Open a private Drive file (image or PDF) in a new tab.
+        // The window must be opened synchronously inside the click handler,
+        // otherwise iOS Safari's popup blocker eats it.
+        function openDriveFile(fileId) {
+            const w = window.open('', '_blank');
+            fetchDriveBlobUrl(fileId).then(function(url) {
+                if (w) w.location = url;
+            }).catch(function(err) {
+                console.error('openDriveFile failed:', err);
+                if (w) w.close();
+                alert('Could not load file. You may need to sign in again.');
+            });
+        }
+
+        // Populate <img data-drive-src="FILE_ID"> placeholders after HTML insert.
+        function hydrateDriveImages(container) {
+            const imgs = (container || document).querySelectorAll('img[data-drive-src]');
+            imgs.forEach(function(img) {
+                const fid = img.getAttribute('data-drive-src');
+                img.removeAttribute('data-drive-src');
+                fetchDriveBlobUrl(fid).then(function(url) { img.src = url; })
+                    .catch(function(err) { console.warn('Thumbnail load failed:', fid, err); });
+            });
+        }
+
+        // ══════════════════════════════════════════════════════════════════
+        //  OFFLINE QUEUE — fuel entries logged with no connection are stored
+        //  in IndexedDB (receipt photo included as a Blob) and synced to
+        //  Sheets/Drive when the app is back online and signed in.
+        // ══════════════════════════════════════════════════════════════════
+        const IDB_NAME = 'fuelTrackerOffline';
+        const IDB_STORE = 'pendingFuelEntries';
+
+        function openQueueDb() {
+            return new Promise(function(resolve, reject) {
+                const req = indexedDB.open(IDB_NAME, 1);
+                req.onupgradeneeded = function() {
+                    req.result.createObjectStore(IDB_STORE, { keyPath: 'id', autoIncrement: true });
+                };
+                req.onsuccess = function() { resolve(req.result); };
+                req.onerror = function() { reject(req.error); };
+            });
+        }
+
+        function queueFuelEntry(formData, receiptFile) {
+            return openQueueDb().then(function(db) {
+                return new Promise(function(resolve, reject) {
+                    const tx = db.transaction(IDB_STORE, 'readwrite');
+                    tx.objectStore(IDB_STORE).add({
+                        formData: formData,
+                        receiptBlob: receiptFile || null,
+                        createdAt: new Date().toISOString()
+                    });
+                    tx.oncomplete = function() { resolve(); };
+                    tx.onerror = function() { reject(tx.error); };
+                });
+            });
+        }
+
+        function getQueuedEntries() {
+            return openQueueDb().then(function(db) {
+                return new Promise(function(resolve, reject) {
+                    const req = db.transaction(IDB_STORE, 'readonly')
+                        .objectStore(IDB_STORE).getAll();
+                    req.onsuccess = function() { resolve(req.result || []); };
+                    req.onerror = function() { reject(req.error); };
+                });
+            });
+        }
+
+        function deleteQueuedEntry(id) {
+            return openQueueDb().then(function(db) {
+                return new Promise(function(resolve, reject) {
+                    const tx = db.transaction(IDB_STORE, 'readwrite');
+                    tx.objectStore(IDB_STORE).delete(id);
+                    tx.oncomplete = function() { resolve(); };
+                    tx.onerror = function() { reject(tx.error); };
+                });
+            });
+        }
+
+        function setOfflineBanner(show, text) {
+            let b = document.getElementById('offlineBanner');
+            if (!b) {
+                b = document.createElement('div');
+                b.id = 'offlineBanner';
+                b.style.cssText = 'display:none; background:#f57f17; color:#fff; ' +
+                    'text-align:center; padding:8px 12px; font-size:13px; font-weight:600;';
+                const container = document.querySelector('.container');
+                if (container) container.insertBefore(b, container.firstChild);
+            }
+            if (text) b.textContent = text;
+            b.style.display = show ? 'block' : 'none';
+        }
+
+        async function updatePendingBadge() {
+            try {
+                const entries = await getQueuedEntries();
+                if (entries.length > 0) {
+                    setOfflineBanner(true, (navigator.onLine ? '🔄 ' : '📴 ') + entries.length +
+                        ' fuel entr' + (entries.length === 1 ? 'y' : 'ies') + ' waiting to sync');
+                } else if (navigator.onLine) {
+                    setOfflineBanner(false);
+                } else {
+                    setOfflineBanner(true, '📴 Offline — entries will be saved locally');
+                }
+            } catch (e) { console.warn('updatePendingBadge:', e); }
+        }
+
+        let flushingQueue = false;
+        async function flushOfflineQueue() {
+            if (flushingQueue) return;
+            if (!navigator.onLine || !accessToken || !gapiInited) return;
+            let entries;
+            try { entries = await getQueuedEntries(); }
+            catch (e) { console.warn('Could not read offline queue:', e); return; }
+            if (!entries.length) return;
+
+            flushingQueue = true;
+            showStatus('Syncing ' + entries.length + ' offline entr' +
+                (entries.length === 1 ? 'y' : 'ies') + '...', 'info');
+            let synced = 0;
+            try {
+                for (const entry of entries) {
+                    const data = entry.formData;
+                    if (entry.receiptBlob && !data.receiptFileId) {
+                        try {
+                            data.receiptFileId = await uploadReceiptToDrive(entry.receiptBlob, data.date);
+                        } catch (upErr) {
+                            console.error('Offline receipt upload failed (saving entry without it):', upErr);
+                        }
+                    }
+                    await writeToSheet(data);
+                    await deleteQueuedEntry(entry.id);
+                    synced++;
+                }
+                showStatus('✅ Synced ' + synced + ' offline entr' + (synced === 1 ? 'y' : 'ies'), 'success');
+                loadLastOdometer();
+            } catch (err) {
+                console.error('Offline sync stopped:', err);
+                showStatus('Offline sync stopped after ' + synced + ' of ' + entries.length +
+                    ' — will retry later', 'error');
+            }
+            flushingQueue = false;
+            updatePendingBadge();
+        }
+
         
         const isStandalone = window.navigator.standalone || window.matchMedia('(display-mode: standalone)').matches;
         
@@ -1151,7 +1364,7 @@
                     return;
                 }
                 
-                accessToken = resp.access_token;
+                markTokenFresh(resp);
                 document.getElementById('loginSection').style.display = 'none';
                 document.getElementById('appContent').style.display = 'block';
                 showStatus('Signed in successfully.', 'success');
@@ -1169,6 +1382,9 @@
 
                 await loadLastOdometer();
                 loadHeaderStats(); // non-critical, fire-and-forget
+                loadCarPhoto();
+                flushOfflineQueue();   // push any entries logged while offline
+                updatePendingBadge();
             };
 
             if (accessToken === null) {
@@ -1189,6 +1405,7 @@
         }
         
         async function loadLastOdometer() {
+            await ensureValidTokenQuiet();
             try {
                 const spreadsheetId = storageGet('fuelTracker_spreadsheetId');
                 const sheetName = storageGet('fuelTracker_sheetName');
@@ -1469,6 +1686,7 @@
         }
 
         async function loadHeaderStats() {
+            await ensureValidTokenQuiet();
             const spreadsheetId = storageGet('fuelTracker_spreadsheetId');
             if (!spreadsheetId || !accessToken) return;
             try {
@@ -1505,6 +1723,7 @@
         }
 
         async function loadHistory() {
+            await ensureValidTokenQuiet();
             showStatus('Loading history...', 'info');
             try {
                 const spreadsheetId = storageGet('fuelTracker_spreadsheetId');
@@ -1604,6 +1823,7 @@
         }
         
         async function loadSummary() {
+            await ensureValidTokenQuiet();
             console.log('=== loadSummary() FUNCTION CALLED ===');
             console.log('accessToken exists?', !!accessToken);
             console.log('gapiInited?', gapiInited);
@@ -2048,6 +2268,7 @@
         }
         
         async function loadPriceTrends() {
+            await ensureValidTokenQuiet();
             showStatus('Loading price trends...', 'info');
             try {
                 const spreadsheetId = storageGet('fuelTracker_spreadsheetId');
@@ -2525,6 +2746,7 @@
         }
         
         async function getOrCreateDriveFolder() {
+            await ensureValidToken();
             if (driveFolder) return driveFolder;
             
             try {
@@ -2593,20 +2815,8 @@
                 const fileId = result.id;
                 console.log('Receipt uploaded to Drive:', fileId);
                 
-                try {
-                    await gapi.client.request({
-                        path: '/drive/v3/files/' + fileId + '/permissions',
-                        method: 'POST',
-                        body: {
-                            role: 'reader',
-                            type: 'anyone'
-                        }
-                    });
-                    console.log('Receipt file set to public (anyone with link)');
-                } catch (permError) {
-                    console.error('Error setting file permissions:', permError);
-                    showStatus('Warning: Receipt uploaded but may not be viewable', 'error');
-                }
+                // Privacy: file stays private to this Google account.
+                // It is displayed via authenticated fetch (fetchDriveBlobUrl).
                 
                 return fileId;
                 
@@ -2619,54 +2829,36 @@
         function toggleReceiptImage(fileId, buttonElement) {
             const container = buttonElement.parentElement;
             let img = container.querySelector('.receipt-image');
-            
+
             if (img) {
                 img.classList.toggle('show');
                 buttonElement.textContent = img.classList.contains('show') ? '📷  Hide Receipt' : ' View Receipt';
-            } else {
+                return;
+            }
+
+            buttonElement.textContent = '⏳ Loading...';
+            fetchDriveBlobUrl(fileId).then(function(url) {
                 img = document.createElement('img');
                 img.className = 'receipt-image show';
-                
-                // Use lh3 CDN URL — works for publicly shared Drive files without session cookies (fixes iOS Safari)
-                img.src = 'https://lh3.googleusercontent.com/d/' + fileId;
+                img.src = url;
                 img.alt = 'Receipt';
-
-                img.onerror = function() {
-                    console.error('Failed to load receipt via lh3, trying uc?export=view. File ID:', fileId);
-                    img.onerror = null;
-                    img.src = 'https://drive.google.com/uc?export=view&id=' + fileId;
-
-                    img.onerror = function() {
-                        console.error('Alternative URL also failed. File ID:', fileId);
-                        img.onerror = null;
-                        img.alt = 'Receipt image failed to load. File ID: ' + fileId;
-                        img.style.padding = '20px';
-                        img.style.background = '#ffebee';
-                        img.style.border = '2px solid #c62828';
-
-                        const link = document.createElement('a');
-                        link.href = 'https://drive.google.com/file/d/' + fileId + '/view';
-                        link.target = '_blank';
-                        link.textContent = '📂  Open in Google Drive';
-                        link.style.display = 'block';
-                        link.style.marginTop = '10px';
-                        link.style.color = '#2196F3';
-                        link.style.textDecoration = 'underline';
-                        container.appendChild(link);
-                    };
-                };
-                
-                img.onload = function() {
-                    console.log('Receipt image loaded successfully for file ID:', fileId);
-                };
-                
                 container.appendChild(img);
                 buttonElement.textContent = '📷  Hide Receipt';
-            }
+            }).catch(function(err) {
+                console.error('Failed to load receipt:', err);
+                buttonElement.textContent = ' View Receipt';
+                const link = document.createElement('a');
+                link.href = 'https://drive.google.com/file/d/' + fileId + '/view';
+                link.target = '_blank';
+                link.textContent = '📂  Open in Google Drive';
+                link.style.cssText = 'display:block; margin-top:10px; color:#2196F3; text-decoration:underline;';
+                container.appendChild(link);
+            });
         }
-        
+
         // ── Oil Change Receipt: Drive folder + upload ──────────────────────────
         async function getOrCreateOcDriveFolder() {
+            await ensureValidToken();
             if (ocDriveFolder) return ocDriveFolder;
 
             // Try the known pre-created folder first
@@ -2749,17 +2941,8 @@
                 const fileId = result.id;
                 console.log('Oil change receipt uploaded to Drive:', fileId);
 
-                try {
-                    await gapi.client.request({
-                        path: '/drive/v3/files/' + fileId + '/permissions',
-                        method: 'POST',
-                        body: { role: 'reader', type: 'anyone' }
-                    });
-                    console.log('Oil change receipt set to public');
-                } catch (permError) {
-                    console.error('Error setting oil change receipt permissions:', permError);
-                    showOcStatus('Warning: Receipt uploaded but may not be viewable', 'error');
-                }
+                // Privacy: file stays private to this Google account.
+                // It is displayed via authenticated fetch (fetchDriveBlobUrl).
 
                 return fileId;
 
@@ -2772,31 +2955,17 @@
 
         document.getElementById('fuelForm').addEventListener('submit', async function(e) {
             e.preventDefault();
-            
+
             const currentOdometer = parseFloat(document.getElementById('odometerValue').value);
-            
+
             if (lastOdometer && currentOdometer <= lastOdometer) {
                 showStatus('Cannot submit: Current odometer must be greater than prior odometer', 'error');
                 return;
             }
-            
+
             const dateValue = document.getElementById('date').value;
             const receiptFile = document.getElementById('receipt').files[0];
-            
-            showStatus('Saving to Google Sheets...', 'info');
-            
-            let receiptFileId = null;
-            
-            if (receiptFile) {
-                try {
-                    showStatus('Uploading receipt image...', 'info');
-                    receiptFileId = await uploadReceiptToDrive(receiptFile, dateValue);
-                } catch (error) {
-                    console.error('Receipt upload failed:', error);
-                    showStatus('Warning: Receipt upload failed, but continuing to save data', 'error');
-                }
-            }
-            
+
             const formData = {
                 date: dateValue,
                 odometer: currentOdometer,
@@ -2805,15 +2974,11 @@
                 gallons: parseFloat(document.getElementById('gallons').value),
                 pricePerGal: parseFloat(document.getElementById('pricePerGal').value),
                 location: document.getElementById('location').value,
-                receiptFileId: receiptFileId
+                receiptFileId: null
             };
-            
-            try {
-                await writeToSheet(formData);
-                showStatus('Fuel stop logged successfully.', 'success');
-                
+
+            function resetFuelForm() {
                 lastOdometer = formData.odometer;
-                
                 document.getElementById('fuelForm').reset();
                 document.getElementById('receiptPreview').innerHTML = '';
                 setTodayDate();
@@ -2822,18 +2987,63 @@
                 document.getElementById('location').value = 'COSTCO SOS';
                 document.getElementById('odometer').value = '';
                 document.getElementById('odometerValue').value = '';
-                
-                setTimeout(function() {
-                    showStatus('Ready for next entry', 'info');
-                }, 2000);
-                
+                setTimeout(function() { showStatus('Ready for next entry', 'info'); }, 2000);
+            }
+
+            // ── OFFLINE PATH: no connection (or not signed in) → queue locally ──
+            if (!navigator.onLine || !accessToken) {
+                try {
+                    await queueFuelEntry(formData, receiptFile || null);
+                    showStatus('📥 Saved offline — will sync when back online', 'success');
+                    resetFuelForm();
+                    updatePendingBadge();
+                } catch (qErr) {
+                    console.error('Offline queue failed:', qErr);
+                    showStatus('Could not save offline: ' + (qErr.message || qErr), 'error');
+                }
+                return;
+            }
+
+            // ── ONLINE PATH ──
+            showStatus('Saving to Google Sheets...', 'info');
+
+            if (receiptFile) {
+                try {
+                    showStatus('Uploading receipt image...', 'info');
+                    formData.receiptFileId = await uploadReceiptToDrive(receiptFile, dateValue);
+                } catch (error) {
+                    console.error('Receipt upload failed:', error);
+                    showStatus('Warning: Receipt upload failed, but continuing to save data', 'error');
+                }
+            }
+
+            try {
+                await writeToSheet(formData);
+                showStatus('Fuel stop logged successfully.', 'success');
+                resetFuelForm();
             } catch (error) {
+                // If the connection dropped mid-save, fall back to the offline
+                // queue so the entry (and receipt) isn't lost.
+                const looksLikeNetwork = !navigator.onLine ||
+                    /network|fetch|timeout|failed/i.test((error && error.message) || '');
+                if (looksLikeNetwork) {
+                    try {
+                        await queueFuelEntry(formData, formData.receiptFileId ? null : (receiptFile || null));
+                        showStatus('📥 Connection lost — entry saved offline and will sync later', 'success');
+                        resetFuelForm();
+                        updatePendingBadge();
+                        return;
+                    } catch (qErr) {
+                        console.error('Fallback offline queue failed:', qErr);
+                    }
+                }
                 showStatus('Error saving: ' + error.message, 'error');
                 console.error('Save error:', error);
             }
         });
-        
+
         async function writeToSheet(data) {
+            await ensureValidToken();
             const spreadsheetId = storageGet('fuelTracker_spreadsheetId');
             const sheetName = storageGet('fuelTracker_sheetName');
             
@@ -2949,7 +3159,31 @@
             if (savedApiKey) document.getElementById('apiKey').value = savedApiKey;
             if (savedSpreadsheetId) document.getElementById('spreadsheetId').value = savedSpreadsheetId;
             if (savedSheetName) document.getElementById('sheetName').value = savedSheetName;
+
+            // OFFLINE MODE: a previously-configured app opens straight to the
+            // fuel form so a fill-up can be logged with no signal.
+            if (!navigator.onLine && savedSpreadsheetId) {
+                document.getElementById('loginSection').style.display = 'none';
+                document.getElementById('appContent').style.display = 'block';
+                setOfflineBanner(true, '📴 Offline — entries will be saved locally');
+            }
+            updatePendingBadge();
         });
+
+        window.addEventListener('online', function() {
+            updatePendingBadge();
+            flushOfflineQueue();
+        });
+        window.addEventListener('offline', function() {
+            setOfflineBanner(true, '📴 Offline — entries will be saved locally');
+        });
+
+        // PWA: register the service worker (caches the app shell for offline use)
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('sw.js').catch(function(err) {
+                console.warn('Service worker registration failed:', err);
+            });
+        }
         
         window.addEventListener('load', function() {
             if (typeof gapi !== 'undefined') {
@@ -3111,6 +3345,7 @@
 
         // Load Documents sheet entries where Type contains 'Oil Change' and render a compact year list
         async function loadOcDocs() {
+            await ensureValidTokenQuiet();
             const listEl = document.getElementById('ocDocsList');
             if (!listEl) return;
             if (!accessToken) {
@@ -3177,16 +3412,13 @@
                         const date   = row[0] || '';
                         const name   = row[2] || '—';
                         const fileId = extractDriveFileId(row[3] || '');
-                        const openUrl = fileId
-                            ? 'https://drive.google.com/uc?export=download&id=' + fileId
-                            : '#';
                         html += '<div class="oc-doc-row">' +
                                 '<div class="oc-doc-info">' +
                                 '<div class="oc-doc-date">📅 ' + escapeHtml(date) + '</div>' +
                                 '<div class="oc-doc-name">' + escapeHtml(name) + '</div>' +
                                 '</div>';
                         if (fileId) {
-                            html += '<a class="oc-doc-open" href="' + openUrl + '" target="_blank">↗ Open</a>';
+                            html += '<a class="oc-doc-open" href="#" onclick="openDriveFile(\'' + fileId + '\'); return false;">↗ Open</a>';
                         } else {
                             html += '<span style="font-size:11px;color:#aaa;">No file</span>';
                         }
@@ -3212,6 +3444,7 @@
         // Sheet columns: A=Date, B=Odometer, C=OilType(F), D=formula, E=Location(skip),
         //                F=OilType, G=AmtQT, H=Cost, I=formula, J=?, K=Notes, L=NextService, M=formula
         async function writeOilChangeToSheet(data) {
+            await ensureValidToken();
             const spreadsheetId = storageGet('fuelTracker_spreadsheetId');
             const OC_SHEET = 'Oil Changes';
 
@@ -3442,23 +3675,19 @@
         // Load stored car photo from Drive on app init (replaces embedded base64 thumbnail)
         function loadCarPhoto() {
             const fileId = storageGet('fuelTracker_carPhotoId');
-            if (!fileId) return;
+            if (!fileId || !accessToken) return;   // embedded fallback shows until signed in
             const img = document.getElementById('headerCarImg');
-            const fallback = img.src; // keep base64 as fallback
-            img.src = 'https://lh3.googleusercontent.com/d/' + fileId;
-            img.onerror = function() {
-                img.onerror = null;
-                img.src = fallback;
-            };
+            fetchDriveBlobUrl(fileId)
+                .then(function(url) { img.src = url; })
+                .catch(function() { /* keep embedded fallback image */ });
         }
 
         // Tap the photo → open full-size in new tab
         function viewCarPhoto() {
             const fileId = storageGet('fuelTracker_carPhotoId');
-            if (fileId) {
-                window.open('https://lh3.googleusercontent.com/d/' + fileId, '_blank');
+            if (fileId && accessToken) {
+                openDriveFile(fileId);
             } else {
-                // No Drive copy yet — open embedded base64 in new tab
                 const img = document.getElementById('headerCarImg');
                 const w = window.open('', '_blank');
                 if (w) {
@@ -3527,14 +3756,7 @@
                 const fileId = result.id;
                 if (!fileId) throw new Error('Drive returned no file ID.');
 
-                // --- Step 3: Make public ---
-                try {
-                    await gapi.client.request({
-                        path: '/drive/v3/files/' + fileId + '/permissions',
-                        method: 'POST',
-                        body: { role: 'reader', type: 'anyone' }
-                    });
-                } catch (permErr) { console.warn('Could not make car photo public:', permErr); }
+                // --- Step 3: (removed) photo stays private; shown via authenticated fetch ---
 
                 // --- Step 4: Write to Documents sheet with Type = 'Photo' ---
                 const today = new Date();
@@ -3546,11 +3768,8 @@
                 // --- Step 5: Persist fileId so CDN URL loads on future visits ---
                 storageSet('fuelTracker_carPhotoId', fileId);
 
-                // Swap thumbnail to CDN URL (avoids base64 in memory)
-                const cdnUrl = 'https://lh3.googleusercontent.com/d/' + fileId;
-                const cdnImg = new Image();
-                cdnImg.onload = function() { img.src = cdnUrl; };
-                cdnImg.src = cdnUrl;
+                // Swap thumbnail to the private Drive copy via authenticated fetch
+                fetchDriveBlobUrl(fileId).then(function(url) { img.src = url; }).catch(function() {});
 
             } catch (err) {
                 console.error('Car photo upload failed:', err);
@@ -3572,6 +3791,7 @@
 
         // Fetch the Type drop-down options from Lookups!A3:A16
         async function loadDocTypes() {
+            await ensureValidTokenQuiet();
             const spreadsheetId = storageGet('fuelTracker_spreadsheetId');
             if (!spreadsheetId || !accessToken) return;
             try {
@@ -3629,6 +3849,7 @@
 
         // Drive: get or verify the "2018 Subaru Outback Documents" folder
         async function getOrCreateDocDriveFolder() {
+            await ensureValidToken();
             if (docDriveFolder) return docDriveFolder;
 
             // Try known pre-created folder first
@@ -3711,17 +3932,8 @@
                 const fileId = result.id;
                 console.log('Document uploaded to Drive:', fileId);
 
-                // Make public (anyone with link)
-                try {
-                    await gapi.client.request({
-                        path: '/drive/v3/files/' + fileId + '/permissions',
-                        method: 'POST',
-                        body: { role: 'reader', type: 'anyone' }
-                    });
-                } catch (permErr) {
-                    console.error('Error setting doc permissions:', permErr);
-                    showDocStatus('Warning: File uploaded but may not be viewable', 'error');
-                }
+                // Privacy: file stays private to this Google account.
+                // It is displayed via authenticated fetch (fetchDriveBlobUrl).
 
                 return fileId;
             } catch (error) {
@@ -3732,6 +3944,7 @@
 
         // Write a row to the "Documents" sheet (A=Date, B=Type, C=Name, D=fileId)
         async function writeDocToSheet(data) {
+            await ensureValidToken();
             const spreadsheetId = storageGet('fuelTracker_spreadsheetId');
             const DOC_SHEET = 'Documents';
 
@@ -3874,9 +4087,9 @@
                      'onclick="toggleDocView(\'' + safeId + '\', this, ' + (isPdf ? 'true' : 'false') + ')">📎 Preview</button>';
 
                 // 📱 Open Doc — matched size to Preview
-                h += '<a href="https://drive.google.com/uc?export=download&id=' + safeId + '" target="_blank" ' +
-                     'style="display:inline-block; padding:8px 14px; background:#00897b; color:#fff; ' +
-                     'border-radius:6px; font-size:13px; font-weight:600; text-decoration:none; line-height:1.2;">📱 Open Doc</a>';
+                h += '<button onclick="openDriveFile(\'' + safeId + '\')" ' +
+                     'style="display:inline-block; padding:8px 14px; background:#00897b; color:#fff; border:none; cursor:pointer; ' +
+                     'border-radius:6px; font-size:13px; font-weight:600; line-height:1.2;">📱 Open Doc</button>';
 
                 // ↗ Drive (secondary text link — optically aligned to button text baseline)
                 h += '<a href="https://drive.google.com/file/d/' + safeId + '/view" target="_blank" ' +
@@ -3914,6 +4127,7 @@
         const DOC_RECENT_LIMIT = 3;
 
         async function loadDocuments(showAll) {
+            await ensureValidTokenQuiet();
             const spreadsheetId = storageGet('fuelTracker_spreadsheetId');
             if (!spreadsheetId || !accessToken) {
                 document.getElementById('docList').innerHTML =
@@ -4020,10 +4234,8 @@
                                 const name   = escapeHtml(entry.row[2] || entry.row[0] || '');
                                 const date   = escapeHtml(entry.row[0] || '');
                                 if (fileId) {
-                                    const src = 'https://lh3.googleusercontent.com/d/' + fileId;
-                                    const full = 'https://lh3.googleusercontent.com/d/' + fileId;
-                                    html += '<a href="' + full + '" target="_blank">' +
-                                            '<img src="' + src + '" alt="' + name + '" loading="lazy">' +
+                                    html += '<a href="#" onclick="openDriveFile(\'' + fileId + '\'); return false;">' +
+                                            '<img data-drive-src="' + fileId + '" alt="' + name + '" loading="lazy">' +
                                             '<div class="doc-gallery-caption">' + date + '</div>' +
                                             '</a>';
                                 }
@@ -4098,6 +4310,7 @@
                 }
 
                 listEl.innerHTML = html;
+                hydrateDriveImages(listEl);
 
             } catch (err) {
                 console.error('Error loading documents:', err);
@@ -4156,6 +4369,7 @@
         }
 
         async function confirmDelete(sheetRowIndex) {
+            await ensureValidToken();
             const inputEl = document.getElementById('delInput_' + sheetRowIndex);
             if (!inputEl) return;
             const typed = inputEl.value; // NOT trimmed — must be exactly "X"
@@ -4222,54 +4436,50 @@
 
             const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
 
+            function showDriveFallback() {
+                buttonElement.textContent = '📎  Preview';
+                if (!container) return;
+                container.innerHTML = '';
+                const link = document.createElement('a');
+                link.href = 'https://drive.google.com/file/d/' + fileId + '/view';
+                link.target = '_blank';
+                link.textContent = '📂  Open in Google Drive';
+                link.style.cssText = 'display:block; margin-top:8px; color:#1565c0; font-size:13px; text-decoration:underline;';
+                container.appendChild(link);
+            }
+
             if (isPdf) {
-                // Use the download/export URL — works for publicly shared files without Drive session cookies.
-                // On iOS Safari this opens the PDF in the built-in viewer (triggered from click context).
-                // On desktop, embed via /preview which is designed for iframes.
-                const pdfDownloadUrl = 'https://drive.google.com/uc?export=download&id=' + fileId;
                 if (isIOS) {
-                    window.open(pdfDownloadUrl, '_blank');
-                    // Nothing shown inline on iOS — button stays as "View"
-                } else {
+                    // Opens the private PDF in Safari's built-in viewer via a blob URL
+                    openDriveFile(fileId);
+                    return;
+                }
+                buttonElement.textContent = '⏳ Loading...';
+                fetchDriveBlobUrl(fileId).then(function(url) {
                     const iframe = document.createElement('iframe');
-                    iframe.src = 'https://drive.google.com/file/d/' + fileId + '/preview';
+                    iframe.src = url;
                     iframe.style.cssText = 'width:100%; height:500px; border:none; border-radius:8px; margin-top:8px;';
-                    iframe.allow = 'autoplay';
                     if (container) container.appendChild(iframe);
                     buttonElement.textContent = '📎  Close';
-                }
+                }).catch(function(err) {
+                    console.error('PDF preview failed:', err);
+                    showDriveFallback();
+                });
                 return;
             }
 
-            // Images: lh3.googleusercontent.com/d/ is Google's CDN URL for publicly shared Drive files.
-            // It serves content without requiring Drive session cookies — works on iOS Safari.
-            const img = document.createElement('img');
-            img.className = 'receipt-image show';
-            img.src = 'https://lh3.googleusercontent.com/d/' + fileId;
-            img.alt = 'Document';
-
-            img.onerror = function() {
-                // First fallback: uc?export=view (also cookie-free for public files)
-                img.onerror = null;
-                img.src = 'https://drive.google.com/uc?export=view&id=' + fileId;
-                img.onerror = function() {
-                    // Final fallback: Drive link
-                    img.onerror = null;
-                    if (container) {
-                        container.innerHTML = '';
-                        const link = document.createElement('a');
-                        link.href = 'https://drive.google.com/file/d/' + fileId + '/view';
-                        link.target = '_blank';
-                        link.textContent = '📂  Open in Google Drive';
-                        link.style.cssText = 'display:block; margin-top:8px; color:#1565c0; font-size:13px; text-decoration:underline;';
-                        container.appendChild(link);
-                        buttonElement.textContent = '📎  Preview';
-                    }
-                };
-            };
-
-            if (container) container.appendChild(img);
-            buttonElement.textContent = '📎  Close';
+            buttonElement.textContent = '⏳ Loading...';
+            fetchDriveBlobUrl(fileId).then(function(url) {
+                const img = document.createElement('img');
+                img.className = 'receipt-image show';
+                img.src = url;
+                img.alt = 'Document';
+                if (container) container.appendChild(img);
+                buttonElement.textContent = '📎  Close';
+            }).catch(function(err) {
+                console.error('Document preview failed:', err);
+                showDriveFallback();
+            });
         }
 
         // Wire up Documents file input preview (image only; PDFs show filename)
