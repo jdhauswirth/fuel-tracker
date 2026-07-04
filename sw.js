@@ -5,7 +5,7 @@
 //
 // Bump CACHE_VERSION whenever you deploy changes to index.html so clients
 // pick up the new version promptly.
-const CACHE_VERSION = 'fuel-tracker-v4';
+const CACHE_VERSION = 'fuel-tracker-v5';
 
 const APP_SHELL = [
   './',
