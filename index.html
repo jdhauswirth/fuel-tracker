@@ -34,6 +34,7 @@
             --accent-press: #155724;
             --accent-ink: #1E7A34;      /* accent used as text on surface */
             --danger: #C62828;
+            --warn: #E65100;
             --readout-bg: #0E1B12;      /* pump LCD chip */
             --readout-digit: #7CF29C;
             --readout-label: #6E967C;
@@ -58,6 +59,7 @@
                 --accent-press: #1E7A34;
                 --accent-ink: #52D273;
                 --danger: #EF5350;
+                --warn: #FFA040;
                 --readout-bg: #0A130C;
                 --readout-digit: #7CF29C;
                 --readout-label: #5F8A6C;
@@ -607,6 +609,18 @@
             border-bottom: 1px solid var(--line);
         }
 
+        /* Last Fill-up summary box on the Log Fuel tab */
+        .last-fill-info {
+            background: var(--surface-2);
+            border: 1px solid var(--line);
+            border-left: 3px solid var(--accent);
+            padding: 12px 14px;
+            border-radius: var(--radius-sm);
+            margin-bottom: 20px;
+            font-size: 14px;
+            color: var(--ink);
+        }
+
         /* ── Chart ─────────────────────────────────────────────────── */
         .chart-container { position: relative; height: 400px; margin-bottom: 20px; }
         #priceTrendChart { max-width: 100%; height: 400px !important; }
@@ -684,7 +698,7 @@
             </div>
             
             <div id="logTab" class="tab-content active">
-                <div id="lastFillInfo" style="background: #e8f5e9; padding: 12px; border-radius: 8px; margin-bottom: 20px; display: none;">
+                <div id="lastFillInfo" class="last-fill-info" style="display: none;">
                     <strong>Last Fill-up:</strong>
                     <div style="margin-top: 5px; font-size: 14px;" id="lastFillDetails"></div>
                 </div>
@@ -789,24 +803,24 @@
                 <div style="margin-bottom: 20px;">
                     <button onclick="loadPriceTrends()">🔄  Load Price Trends</button>
                 </div>
-                <div style="margin-bottom: 15px; padding: 15px; background: #f5f5f5; border-radius: 8px;">
-                    <div style="margin-bottom: 10px; font-weight: 600; color: #333;">Date Range Filter</div>
+                <div class="config-section">
+                    <div style="margin-bottom: 10px; font-weight: 600;">Date Range Filter</div>
                     <div style="display: flex; flex-direction: column; gap: 10px;">
                         <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
                             <label for="trendStartDate" style="min-width: 80px; font-size: 14px;">Start Date:</label>
-                            <input type="date" id="trendStartDate" style="flex: 1; min-width: 150px; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                            <input type="date" id="trendStartDate" style="flex: 1; min-width: 150px;">
                         </div>
                         <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
                             <label for="trendEndDate" style="min-width: 80px; font-size: 14px;">End Date:</label>
-                            <input type="date" id="trendEndDate" style="flex: 1; min-width: 150px; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                            <input type="date" id="trendEndDate" style="flex: 1; min-width: 150px;">
                         </div>
                         <div style="display: flex; gap: 10px; flex-wrap: wrap;">
-                            <button onclick="applyDateFilter()" style="flex: 1; padding: 10px; background: linear-gradient(135deg, #2E7D32 0%, #1B5E20 100%); color: white; border: none; border-radius: 6px; font-weight: 600; cursor: pointer;">Apply Filter</button>
-                            <button onclick="resetDateFilter()" style="flex: 1; padding: 10px; background: #666; color: white; border: none; border-radius: 6px; font-weight: 600; cursor: pointer;">Show All Time</button>
+                            <button onclick="applyDateFilter()" style="flex: 1;">Apply Filter</button>
+                            <button onclick="resetDateFilter()" class="secondary-btn" style="flex: 1; margin-top: 0;">Show All Time</button>
                         </div>
                     </div>
                 </div>
-                <div style="margin-bottom: 15px; padding: 10px; background: #f5f5f5; border-radius: 8px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                <div class="config-section" style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
                     <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 14px;">
                         <input type="checkbox" id="showTrendline" checked onchange="toggleTrendline()" style="width: 18px; height: 18px; cursor: pointer;">
                         <span>Show Trendline (Red)</span>
@@ -868,7 +882,7 @@
                     <div class="form-group">
                         <label for="ocOilType">Oil Type</label>
                         <input type="text" id="ocOilType" value="OW20 SYN" readonly
-                               style="background:#f5f5f5; color:#666;">
+                               class="calculated">
                     </div>
 
                     <div class="form-group">
@@ -910,7 +924,7 @@
 
                 <!-- ── Oil Change Documents (from Documents sheet, Type contains 'Oil Change') ── -->
                 <div id="ocDocsList" style="margin-top: 18px;">
-                    <p style="text-align:center; color:#999; font-size:13px;">Loading oil change documents…</p>
+                    <p style="text-align:center; color:var(--ink-muted); font-size:13px;">Loading oil change documents…</p>
                 </div>
             </div>
             <!-- ===== END OIL CHANGE LOG TAB ===== -->
@@ -1532,7 +1546,7 @@
 
                         if (mileageNextService !== null && lastOdometer) {
                             const milesUntil = Math.round(mileageNextService - lastOdometer);
-                            const oilColor = milesUntil <= 500 ? '#c62828' : (milesUntil <= 1000 ? '#e65100' : '#2e7d32');
+                            const oilColor = milesUntil <= 500 ? 'var(--danger)' : (milesUntil <= 1000 ? 'var(--warn)' : 'var(--accent-ink)');
                             const oilIcon  = milesUntil <= 500 ? '⚠️' : '🔧';
 
                             // Fetch T14 ("avg miles per day") from Mileage & Refueling to estimate days
@@ -1546,7 +1560,7 @@
                                 const milesPerDay = parseFloat(String(t14Raw || '').replace(/,/g, ''));
                                 if (!isNaN(milesPerDay) && milesPerDay > 0) {
                                     const daysEst = Math.round(milesUntil / milesPerDay);
-                                    const daysColor = daysEst <= 14 ? '#c62828' : (daysEst <= 30 ? '#e65100' : '#2e7d32');
+                                    const daysColor = daysEst <= 14 ? 'var(--danger)' : (daysEst <= 30 ? 'var(--warn)' : 'var(--accent-ink)');
                                     daysUntilHtml = ' <span style="color:' + daysColor + '">(' + daysEst.toLocaleString() + ' days)</span>';
                                 }
                             } catch (t14Err) {
@@ -4365,11 +4379,11 @@
             const delArea = document.getElementById('delArea_' + sheetRowIndex);
             if (!delArea) return;
             delArea.innerHTML =
-                '<div style="margin-top:4px; padding:8px; background:#fff3e0; border-radius:6px; border:1px solid #e53935;">' +
-                '<span style="font-size:12px; color:#b71c1c; font-weight:600;">Type uppercase X to confirm delete</span>' +
+                '<div style="margin-top:4px; padding:8px; background:var(--surface-2); border-radius:6px; border:1px solid var(--danger);">' +
+                '<span style="font-size:12px; color:var(--danger); font-weight:600;">Type uppercase X to confirm delete</span>' +
                 '<div style="display:flex; gap:6px; margin-top:6px; align-items:center;">' +
                 '<input type="text" id="delInput_' + sheetRowIndex + '" maxlength="1" placeholder="X" ' +
-                'style="width:48px; padding:6px; border:2px solid #e53935; border-radius:4px; font-size:16px; ' +
+                'style="width:48px; padding:6px; border:2px solid var(--danger); border-radius:4px; font-size:16px; ' +
                 'text-align:center; font-weight:bold;" autocomplete="off">' +
                 '<button onclick="confirmDelete(' + sheetRowIndex + ')" ' +
                 'style="padding:6px 12px; background:#e53935; color:#fff; border:none; border-radius:4px; ' +
